@@ -60,7 +60,22 @@ Produces:
 **JS/Vue only:** `--lang=js`  
 **Nuxt monorepo:** `--lang=js` at the Nuxt repo root — add `impactlens.config.json` with package aliases. See [config-setup.md](config-setup.md#2-nuxt-3-monorepo-package-scoped-aliases).
 
-## 4. Analyze a ticket (default = AI briefing)
+## 4. Investigate a symbol (default workflow)
+
+Once you have a keyword from the ticket or repo search:
+
+```bash
+impactlens find sqlite/Graph.sqlite PaymentController
+impactlens trace sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay"
+impactlens ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay" --compact
+```
+
+Use **`trace`** for a quick flow story (route → controller → fields → services + coverage gaps).  
+Use **`ai-context --compact`** when you need the full navigation paste for an AI tool.
+
+## 5. Optional ticket briefing
+
+Only when the ticket has technical anchors (endpoints, field paths, symbols):
 
 ```bash
 npm run analyze:ticket -- sqlite/Graph.sqlite \
@@ -68,7 +83,7 @@ npm run analyze:ticket -- sqlite/Graph.sqlite \
   --scopes=php,js
 ```
 
-Output is a compact markdown briefing (read-first, flow paths, files to open). Paste into your AI tool.
+Output is a compact markdown briefing (read-first, flow paths, files to open). Paste into your AI tool, then continue with `find` → `trace` → `ai-context`.
 
 | Flag | When |
 |------|------|
@@ -77,13 +92,11 @@ Output is a compact markdown briefing (read-first, flow paths, files to open). P
 | `--full` | Debug ranking (raw matches — high token cost) |
 | `--answers=ticket_topic:ui,change_includes:mixed` | Skip interactive prompts |
 
-## 5. Deep dive one symbol (optional)
-
-Pick something from **Read first** in the briefing:
+## 6. Blast radius (optional)
 
 ```bash
-npm run analyze:ai-context -- sqlite/Graph.sqlite \
-  "App\\Services\\SomeService::method" --compact
+npm run analyze:change-impact -- sqlite/Graph.sqlite "App\\Services\\SomeService::method"
+npm run analyze:impact -- sqlite/Graph.sqlite "App\\Services\\SomeService::method"
 ```
 
 ---
@@ -93,7 +106,7 @@ npm run analyze:ai-context -- sqlite/Graph.sqlite \
 After `npm install`, the skill is at `.ai/impactlens/skill.md` in your project (source: `assets/agent-skill/SKILL.md` in this repo).
 
 **Developer:** steps 1–3 once per repo.  
-**AI:** step 4 per ticket, step 5 only if needed.
+**AI:** `find` → `trace` → `ai-context` per task; `ticket` only when anchors are clear.
 
 ---
 
@@ -106,4 +119,6 @@ After `npm install`, the skill is at `.ai/impactlens/skill.md` in your project (
 | [config.md](config.md) | All config files explained |
 | [scan-config.md](scan-config.md) | Alias examples, monorepo paths |
 | [commands.md](commands.md) | All CLI flags |
+| [trace.md](trace.md) | End-to-end flow + coverage for one symbol |
+| [ai-context.md](ai-context.md) | Full navigation report for AI paste |
 | [ticket-analysis.md](ticket-analysis.md) | Session, workflows, flow paths |

@@ -1,10 +1,7 @@
 ---
 name: impactlens
 description: >-
-  Complement ticket reasoning with the code graph: ai-context, change-impact,
-  and impact for callers, callees, dependencies, and blast radius. Run
-  analyze:ticket only when the ticket has enough technical anchors for graph
-  navigation. Graph.sqlite, UI→API flows.
+  Navigate large codebases using a static code graph. Find symbols, trace end-to-end flows (route → controller → fields → services), inspect callers/callees, and change impact. Use ticket analysis only when tickets contain technical anchors.
 ---
 
 # ImpactLens
@@ -23,12 +20,14 @@ Never treat any ImpactLens output as authoritative. Verify everything in code be
 
 | Situation | Use |
 |-----------|-----|
-| You already know a class, method, endpoint, route, or file | `ai-context`, `change-impact`, `impact` — skip `analyze:ticket` |
-| Ticket has technical anchors (endpoints, field paths, symbols, routes, namespaces) and you want graph-ranked entrypoints | `analyze:ticket` (optional), then graph commands from the briefing |
-| Ticket is vague natural language only | Do **not** run `analyze:ticket`; search the repo yourself, then use graph commands once you have a symbol |
-| You need blast radius or dependency context around a known symbol | `change-impact`, `impact`, `ai-context` |
+| Symbol / route / field name unclear | `find` |
+| API or controller ticket — need the flow fast | `find` → **`trace`** |
+| Full context for AI (nav, arch, cycles, risk) | `ai-context --compact` |
+| Blast radius around a known symbol | `change-impact`, `impact` |
+| Ticket has technical anchors and you want ranked entrypoints | `analyze:ticket` (optional), then graph commands |
+| Vague ticket only | Do **not** run `analyze:ticket`; repo search → `find` → `trace` |
 
-**Primary value:** the graph (`ai-context`, `change-impact`, `impact`), not mandatory ticket analysis.
+**Primary value:** `find` → `trace` → `ai-context`, not mandatory ticket analysis.
 
 ---
 
@@ -81,17 +80,23 @@ Read the briefing (when used) in this order: Read first → Flow paths → Warni
 
 ## 3. Investigate with the graph
 
-Once you have a symbol (from your own search or from an optional briefing):
+Once you have a symbol (from your own search, `find`, or from an optional briefing):
 
 ```bash
-impactlens ai-context sqlite/Graph.sqlite "<symbol>" --compact
-impactlens change-impact sqlite/Graph.sqlite "<symbol>"
-impactlens impact sqlite/Graph.sqlite "<symbol>"
+impactlens find sqlite/Graph.sqlite PaymentController
+impactlens find sqlite/Graph.sqlite "POST /payments" --kind=route
+
+impactlens trace sqlite/Graph.sqlite "<symbol-or-fuzzy-name>"
+
+impactlens ai-context sqlite/Graph.sqlite "<graph-id>" --compact
+
+impactlens change-impact sqlite/Graph.sqlite "<graph-id>"
+impactlens impact sqlite/Graph.sqlite "<graph-id>"
 ```
 
-**Symbol id examples:** `SpOTTBackend\Services\Foo::bar` (PHP) · `js:apps/.../heroTeaser/index.vue::HeroTeaser` (Vue) · `api:GET:/slide-presets` (route)
+**Symbol id examples:** `App\Http\Controllers\PaymentController::pay` (PHP) · `js:apps/.../heroTeaser/index.vue::HeroTeaser` (Vue) · `api:POST:api/payments` (route)
 
-Use these to understand callers, callees, dependencies, and blast radius before changing code.
+**Typical order:** `find` → **`trace`** (flow + coverage) → **`ai-context`** (full paste) → `change-impact` / `impact` if blast radius matters.
 
 ---
 
@@ -133,6 +138,8 @@ Record feedback **once per task**. Skip feedback if you could not meaningfully e
 One of:
 
 * `analyze:ticket`
+* `find`
+* `trace`
 * `ai-context`
 * `change-impact`
 * `impact`
@@ -165,7 +172,7 @@ Record what you actually investigated in `actual`. If the command suggested entr
 ## Rules
 
 * **Do not** run `analyze:ticket` for every task — use it only when technical anchors make graph navigation meaningful.
-* Prefer `ai-context` / `change-impact` / `impact` when you already have a symbol.
+* Prefer **`find` → `trace` → `ai-context`** for controller/API work.
 * If you run `analyze:ticket`, pass explicit `--answers` with `--non-interactive`.
 * Prefer inline `--ticket="…"` with the ticket text the user gave you.
 * Never treat briefing output or graph output as source of truth — verify in code.

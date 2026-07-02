@@ -404,6 +404,64 @@ Details: [Ticket analysis](ticket-analysis.md) · [Scan config](scan-config.md) 
 
 ---
 
+## Find
+
+Purpose: search the graph for symbols, routes, and request fields by fuzzy text.
+
+```bash
+npm run analyze:find -- <db.sqlite> "<query>" [options]
+impactlens find <db.sqlite> "<query>" [options]
+```
+
+Examples:
+
+```bash
+impactlens find sqlite/Graph.sqlite PaymentController
+impactlens find sqlite/Graph.sqlite "POST /payments" --kind=route
+impactlens find sqlite/Graph.sqlite providerCategory --kind=field
+```
+
+Options:
+
+| Option | Default | Description |
+|---|---|---|
+| `--kind=auto\|symbol\|route\|field\|config\|all` | `auto` | Restrict result types |
+| `--limit=N` | `20` | Max results |
+
+Use the returned graph id with `trace`, `ai-context`, or `change-impact`.
+
+---
+
+## Trace
+
+Purpose: compact end-to-end flow report for one symbol — route → controller → fields → validation → calls, plus coverage gaps.
+
+```bash
+npm run analyze:trace -- <db.sqlite> "<symbol>" [options]
+impactlens trace <db.sqlite> "<symbol>" [options]
+```
+
+Examples:
+
+```bash
+impactlens trace sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay"
+impactlens trace sqlite/Graph.sqlite "api:POST:api/payments"
+impactlens trace sqlite/Graph.sqlite PaymentController::pay --json --output=trace.json
+```
+
+Options:
+
+| Option | Default | Description |
+|---|---|---|
+| `--limit=N` | `20` | Max rows per section |
+| `--include-interface-resolved` | off | Include interface-resolved call edges |
+| `--json` | off | Structured `TraceResult` payload |
+| `--output=<file>` | — | Write plain-text or JSON to file |
+
+Details: [trace.md](trace.md)
+
+---
+
 ## AI Context Report
 
 Purpose: generate a compact AI-friendly context report by aggregating existing analyses.
@@ -440,7 +498,7 @@ Output explanation:
 - Architecture notes mark likely framework HTTP false positives when applicable.
 - Includes target metadata, summary, purpose guess, callers, calls, dependencies, inheritance, architecture notes, cycles, and suggested review scope.
 - Built as an aggregation layer on top of existing analyses.
-- Works as the core AI feature; pair it with `analyze:ticket` for ticket-driven navigation.
+- Pair with `trace` for a quick flow overview, then `ai-context` for the full paste.
 
 JSON output example:
 

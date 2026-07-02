@@ -91,6 +91,14 @@ const COMMANDS: Record<string, CommandDef> = {
         script: "commands/risk.ts",
         description: "Same as risk",
     },
+    trace: {
+        script: "commands/trace.ts",
+        description: "End-to-end flow trace for a symbol (alias: analyze:trace)",
+    },
+    "analyze:trace": {
+        script: "commands/trace.ts",
+        description: "Same as trace",
+    },
     "install-skill": {
         script: "",
         description: "Write .ai/impactlens/skill.md in the current project",
@@ -129,6 +137,7 @@ Examples:
   impactlens ticket sqlite/Graph.sqlite --ticket="Hero teaser layout…" --scopes=php,js \\
     --answers=ticket_topic:ui,change_includes:cms_ui --non-interactive
   impactlens find sqlite/Graph.sqlite PaymentController
+  impactlens trace sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar"
   impactlens ai-context sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar" --compact
 
 List commands only:  impactlens --commands

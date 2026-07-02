@@ -64,7 +64,9 @@ impactlens scan /path/to/repository --lang=both
 Investigate a symbol:
 
 ```bash
-impactlens ai-context sqlite/Graph.sqlite "<symbol>"
+impactlens find sqlite/Graph.sqlite PaymentController
+impactlens trace sqlite/Graph.sqlite "PaymentController::pay"
+impactlens ai-context sqlite/Graph.sqlite "<symbol>" --compact
 impactlens change-impact sqlite/Graph.sqlite "<symbol>"
 impactlens impact sqlite/Graph.sqlite "<symbol>"
 ```
@@ -88,6 +90,8 @@ Use ticket analysis only when the ticket already contains enough technical infor
 | Command         | Purpose                                       |
 | --------------- | --------------------------------------------- |
 | `scan`          | Build the code graph                          |
+| `find`          | Search symbols, routes, and fields            |
+| `trace`         | End-to-end flow + coverage for one symbol     |
 | `ai-context`    | Show callers, callees and surrounding context |
 | `change-impact` | Analyze blast radius                          |
 | `impact`        | Extended dependency analysis                  |
