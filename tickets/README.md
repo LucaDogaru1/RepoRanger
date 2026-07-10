@@ -46,7 +46,7 @@ Infer answers from the ticket text — do not use `unsure`:
 --answers=ticket_topic:api,change_includes:mixed
 ```
 
-See `assets/agent-skill/SKILL.md` (or `.ai/impactlens/skill.md` after install) for agent workflow.
+See `assets/agent-skill/SKILL.md` (or `.cursor/SKILL.md` after install) for agent workflow.
 
 ## UI translations / config API expansion (e.g. `NEW-new.txt`)
 

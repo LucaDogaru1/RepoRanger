@@ -30,7 +30,7 @@ Instead of searching blindly, you can ask questions like:
 npm install impactlens
 ```
 
-On install, the agent skill is written to `.ai/impactlens/skill.md`.
+On install, the agent skill is written to `.cursor/SKILL.md`.
 
 Skip with:
 
@@ -81,7 +81,7 @@ impactlens ticket sqlite/Graph.sqlite \
 
 Use ticket analysis only when the ticket already contains enough technical information (API names, endpoints, field names, symbols, routes, etc.). Otherwise, locate the first code symbol yourself or let your AI agent do it, then continue with the graph commands.
 
-**Most users will simply install the generated skill.md and let their AI agent use ImpactLens whenever it is beneficial**.
+**Most users will simply install the generated SKILL.md and let their AI agent use ImpactLens whenever it is beneficial**.
 
 ---
 

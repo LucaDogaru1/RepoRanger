@@ -8,7 +8,7 @@ Everything you need once. No hunting through other docs.
 
 ```bash
 npm install impactlens
-# skill auto-written to .ai/impactlens/skill.md
+# skill auto-written to .cursor/SKILL.md
 impactlens --help
 ```
 
@@ -103,7 +103,7 @@ npm run analyze:impact -- sqlite/Graph.sqlite "App\\Services\\SomeService::metho
 
 ## AI agents
 
-After `npm install`, the skill is at `.ai/impactlens/skill.md` in your project (source: `assets/agent-skill/SKILL.md` in this repo).
+After `npm install`, the skill is at `.cursor/SKILL.md` in your project (source: `assets/agent-skill/SKILL.md` in this repo).
 
 **Developer:** steps 1–3 once per repo.  
 **AI:** `find` → `trace` → `ai-context` per task; `ticket` only when anchors are clear.
