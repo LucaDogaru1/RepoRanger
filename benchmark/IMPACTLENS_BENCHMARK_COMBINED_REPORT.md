@@ -31,7 +31,7 @@ Mediane. Navigationsmetriken für Multiview-WITHOUT ohne den Run mit unvollstän
 | Ticket | Runs | Dauer WITH | Dauer WITHOUT | Laufzeitvergleich | Dateien WITH | Dateien WITHOUT | Datei-Reduktion | Suchen WITH | Suchen WITHOUT | Such-Reduktion | Navigation WITH | Navigation WITHOUT | Navigationsvergleich | Completion |
 | ------ | ---: | ---------: | ------------: | ----------------- | -----------: | --------------: | --------------- | ----------: | -------------: | -------------- | --------------: | -----------------: | -------------------- | ---------- |
 | UTR – CMS Toggle Download videos | 5/5 | 198 s | 230 s | 14 % schneller | 17 | 22 | 23 % weniger | 9 | 17 | 47 % weniger | 13 | 17 | 24 % weniger | 5/5 vs 5/5 |
-| SPOTT-16945 – fullIsoCode | 5/5 | 371 s | 222 s | 67 % langsamer | 10 | 16 | 38 % weniger | 3 | 9 | 67 % weniger | 6 | 9 | 33 % weniger | 5/5 vs 5/5 |
+| TICKET-16945 – fullIsoCode | 5/5 | 371 s | 222 s | 67 % langsamer | 10 | 16 | 38 % weniger | 3 | 9 | 67 % weniger | 6 | 9 | 33 % weniger | 5/5 vs 5/5 |
 | [B] Image duplicates (CMS) | 5/5 | 190 s | 189 s | kein Unterschied | 6 | 14 | 57 % weniger | 4 | 8 | 50 % weniger | 6 | 8 | 25 % weniger | 5/5 vs 5/5 |
 | [API] Related contents / Cat3 | 5/5 | 300 s | 182 s | 65 % langsamer | 9 | 11 | 18 % weniger | 6 | 10 | 40 % weniger | 8 | 10 | 20 % weniger | 5/5 vs 5/5 |
 | [API] Multiview / userCountry | 5/5 | 306 s | 245 s | 25 % langsamer | 14 | 16,5 | 15 % weniger | 4 | 7 | 43 % weniger | 7 | 7 | kein Unterschied | 5/5 vs 5/5 |
@@ -61,7 +61,7 @@ Auch nach Ausschluss der Laufzeit-Ausreißer bleiben fullIsoCode und Cat3 mit Im
 * **Störungen:** PHPUnit lokal oft durch fehlende Redis-Extension blockiert (beide Bedingungen); ein WITH-Run mit Sandbox/EPERM-Rauschen bei ImpactLens. Navigationstelemetrie bleibt nutzbar; Laufzeit enthält ggf. Test-Umwege, ohne klaren Einzel-Ausreißer wie bei fullIsoCode/Cat3.
 * **Root Cause:** alle 10 Runs konvergierten auf dieselbe Ursache (Toggle hinter `apiSetting.download_url`, direkte S3-URLs, fehlendes Player-Setting + Proxy).
 
-### SPOTT-16945 – CMS-driven fullIsoCode
+### TICKET-16945 – CMS-driven fullIsoCode
 
 * **Stärkster messbarer Vorteil:** −67 % klassische Suchen und −33 % Navigationsaktionen; −38 % geöffnete Dateien (infra-bereinigt).
 * **Laufzeit:** WITH deutlich langsamer (371 s vs 222 s; ohne 521-s-Run weiterhin 53 % langsamer).
@@ -171,7 +171,7 @@ Nicht gestützt / irreführend:
 ## Limitations
 
 * Nur **5 Tickets**, jeweils **10 Runs** – kleine Stichprobe.
-* Wiederholte Runs im **selben Repository** (`spott-monorepo`) und oft derselben Branch/Base-Commit – Generalisierung auf andere Codebases unklar.
+* Wiederholte Runs im **selben Repository** (`benchmark-monorepo`) und oft derselben Branch/Base-Commit – Generalisierung auf andere Codebases unklar.
 * Modell-, Prompt- und Cache-/Warm-up-Effekte nicht kontrolliert.
 * Sandbox-/EPERM-Störungen, fehlende Redis-Extension, Podman/DB-Umwege und dirty Worktrees in mehreren Runs.
 * Ein WITHOUT-Run ohne Navigationstelemetrie; zwei zusätzliche fullIsoCode-WITH-Runs nicht in der primären 50er-Auswertung.
