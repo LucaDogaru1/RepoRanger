@@ -1,177 +1,479 @@
 ---
+
 name: impactlens
 description: >-
-  Navigate large codebases using a static code graph. Find symbols, trace end-to-end flows
-  (route → controller → fields → services), inspect callers/callees, and change impact.
-  Use ticket analysis only when tickets contain concrete technical anchors.
----
+Navigate large codebases using a static code graph. Find symbols, trace
+runtime and data flows, inspect relationships, and assess change impact.
+Use ticket analysis only when tickets contain concrete technical anchors.
+-------------------------------------------------------------------------
 
 # ImpactLens
 
-ImpactLens is a **code graph navigation tool** — a map, not a decision engine.
+ImpactLens is a code-navigation tool — a map, not a decision engine.
 
-* **You** read the ticket and find the first anchor (symbol, route, file, feature name).
-* **ImpactLens** shows what the ticket alone cannot: callers, callees, routes, field flow, dependencies, blast radius.
-* **Repository code** is always the source of truth — verify everything before editing.
-
-Use ImpactLens **before** broad repo search for navigation tasks. Use grep/search **after** ImpactLens to verify details or when the graph has no match.
-
-**Primary workflow:** `find` → `trace` → `ai-context --compact` → verify in code → implement.
-
-Do **not** start with `analyze:ticket`. That command is optional and only for tickets with concrete technical anchors.
-
----
-
-# When to use what
-
-| Situation | Use |
-|-----------|-----|
-| Symbol, route, field, or feature name unclear | `find` |
-| You have an anchor — need flow / connections | `trace` |
-| Full navigation context for AI paste | `ai-context --compact` |
-| Blast radius around a known symbol | `change-impact`, `impact` |
-| Vague ticket (no symbols, routes, fields) | Repo search → verified anchor → `find` / `trace` |
-| Ticket has strong anchors and you want ranked hints | `analyze:ticket` (optional), then graph commands |
-| Mixed / multi-feature ticket | Split into anchors → navigate each separately |
-
-**Default order:**
-
-```txt
-unknown anchor:  find → trace → ai-context
-known symbol:    trace → ai-context
-change/risk:     ai-context → change-impact / impact
-```
-
----
-
-# Workflow
-
-## 1. Read the request
-
-Identify workflow type (UI, API, queue, import, etc.) and any **concrete anchors**:
-
-* endpoints, routes, request/response fields, dotted field paths
-* PascalCase/camelCase symbols, filenames, namespaces, model/command names
-* technical acceptance criteria tied to code
-
-Vague tickets often have no reliable graph entrypoint ("page is slow", "hero looks wrong")  — use repo search first, then ImpactLens on a verified anchor.
-
-If you already have a symbol, file, or route, **skip `analyze:ticket`** and go straight to graph commands.
-
-## 2. Navigate with graph commands
+Run it through:
 
 ```bash
-impactlens find sqlite/Graph.sqlite PaymentController
-impactlens find sqlite/Graph.sqlite "POST /payments" --kind=route
-
-impactlens trace sqlite/Graph.sqlite "<symbol-or-fuzzy-name>"
-
-impactlens ai-context sqlite/Graph.sqlite "<graph-id>" --compact
-
-impactlens change-impact sqlite/Graph.sqlite "<graph-id>"
+npx impactlens
 ```
 
-**Symbol id examples:** `App\Http\Controllers\PaymentController::pay` · `js:apps/.../heroTeaser/index.vue::HeroTeaser` · `api:POST:api/payments`
-
-| Command | Use for |
-|---------|---------|
-| `find` | Unknown symbols, feature names, routes, endpoints, fields |
-| `trace` | Callers/callees, route→controller→service, UI→API, field flow |
-| `ai-context --compact` | Full nav context, architecture, cycles, risk — paste for AI |
-| `change-impact` / `impact` | Blast radius, what may break |
-
-## 3. Mixed tickets
-
-Split independent features into separate anchors. Navigate each — do not let one strong match hide others.
-
-```txt
-PostingsNotifications     → find "PostingsNotifications" → ai-context
-sitemap submissions       → find "SubmitSitemap" → trace
-backend dark mode         → find "backendDarkMode" → ai-context
-```
-
-## 4. `analyze:ticket` (optional only)
-
-Run **only** when the ticket has concrete anchors (endpoints, class/method names, fields, routes) and ranked entrypoints would help. Never the default.
-
-```bash
-impactlens ticket sqlite/Graph.sqlite \
-  --ticket="GET /api/v1/slide-presets — add slidePreset filter to HeroTeaser CMS cell" \
-  --scopes=php,js \
-  --answers=ticket_topic:ui,change_includes:cms_ui \
-  --non-interactive
-```
-
-**`ticket_topic`:** `ui` · `queue` · `api` · `import` · `cron` · `migration` · `background` · `mixed`
-
-**`change_includes`:** `cms_ui` · `queue_job` · `api_field` · `persistence` · `backend_logic` · `import_pipeline` · `infra_new` · `mixed`
-
-**`scopes`:** `php` (backend) · `php,js` (Vue/Nuxt/CMS UI, UI→API)
-
-Read output: Read first → Flow paths → Warnings. Treat as hypotheses — continue with `find` / `trace` / `ai-context`. Do not stop at the briefing.
-
-If low confidence or no anchors, ignore the briefing and use repo search + graph commands.
-
-## 5. Verify and implement
-
-Open and verify returned files in the repo before editing. If the graph is incomplete, continue with normal investigation.
+Repository code is always the source of truth. Verify relevant graph results directly in code before editing.
 
 ---
 
-# Feedback (mandatory)
+# Core workflow
 
-After using ImpactLens, append **one JSON line** to `.ai/impactlens/impactlens-feedback.jsonl`. Once per task; skip if you could not evaluate.
+1. Read and understand the ticket.
+2. Identify the strongest concrete technical anchor.
+3. Choose the cheapest reliable navigation method.
+4. Use ImpactLens only to answer a concrete unresolved navigation question.
+5. Inspect graph results in repository code.
+6. Stop graph navigation once the likely implementation or root-cause area is known.
+7. Continue with targeted search, implementation, tests, and validation.
+8. Evaluate ImpactLens usefulness from the actual chronological workflow.
+
+There is no mandatory ImpactLens command sequence.
+
+Do not force ImpactLens usage merely because it is available.
+
+Do not avoid it when it can answer the current question more directly than broad repository search.
+
+---
+
+# Resolve the graph database first
+
+Before the first ImpactLens query, identify the correct graph database path.
+
+Possible locations include:
+
+```text
+impactlens/graph.sqlite
+sqlite/Graph.sqlite
+graph.sqlite
+```
+
+Prefer:
+
+1. an explicitly provided path
+2. `impactlens.config.json`
+3. repository documentation or benchmark instructions
+4. an existing non-empty graph database
+
+Do not assume an example path is correct.
+
+Confirm that the selected file exists and is not an empty placeholder or invalid SQLite database.
+
+Reuse the verified path in later commands:
+
+```bash
+npx impactlens find <graph-db> PaymentController
+```
+
+If a graph path fails:
+
+* record the failure accurately
+* check configuration or documented infrastructure
+* retry only with a verified path
+* continue with normal repository search when no usable graph is available
+
+Do not rebuild or modify the graph merely to locate it.
+
+---
+
+# Choosing anchors
+
+Prefer anchors likely to exist directly in code:
+
+1. exact classes, methods, components, functions, commands, or namespaces
+2. routes and endpoints
+3. request, response, model, or database fields
+4. configuration keys or statuses
+5. unique business terms
+6. general feature names
+
+Avoid inventing plausible-sounding class names.
+
+Example:
+
+```text
+Ticket:
+Archived content remains visible
+
+Strong anchor:
+is_archived
+
+Weak inferred anchor:
+EditorialService
+```
+
+When an exact file is provided, open it directly.
+
+When a concrete symbol, route, endpoint, or field is known but its location is unclear, prefer `find` before broad repository-wide search.
+
+For vague tickets, use targeted repository search first to discover a verified technical anchor.
+
+For mixed tickets, investigate each independent feature separately.
+
+---
+
+# Choosing a navigation method
+
+| Situation                                                              | Preferred action             |
+| ---------------------------------------------------------------------- | ---------------------------- |
+| Exact file is known                                                    | Open it directly             |
+| Clear filename is known                                                | Targeted file lookup or glob |
+| Unique literal is likely                                               | Exact grep                   |
+| Symbol, route, endpoint, or field location is unclear                  | `find`                       |
+| Runtime, request, UI-to-API, or data flow is unclear                   | `trace`                      |
+| Callers, callees, dependencies, interfaces, or inheritance are unclear | `ai-context --compact`       |
+| Blast radius is unclear                                                | `change-impact` or `impact`  |
+| Ticket is vague with no verified anchor                                | Targeted repository search   |
+| Several concrete anchors need ranking                                  | Optional `analyze:ticket`    |
+
+Use the cheapest method that can reliably answer the current question.
+
+---
+
+# Commands
+
+## Find an entrypoint
+
+```bash
+npx impactlens find <graph-db> PaymentController
+npx impactlens find <graph-db> "POST /payments" --kind=route
+npx impactlens find <graph-db> userCountry --kind=field
+```
+
+Use `find` when the repository location or exact graph identifier is unknown.
+
+Inspect the most relevant result directly in repository code.
+
+Do not run additional graph commands merely to confirm the same result.
+
+## Trace a flow
+
+```bash
+npx impactlens trace <graph-db> "<symbol-or-fuzzy-name>"
+```
+
+Use `trace` when a specific flow question remains, such as:
+
+* Which route reaches this controller?
+* Which service receives this field?
+* How does a UI action reach the backend?
+* Where does this value flow next?
+
+Do not use `trace` only because `find` returned a controller.
+
+## Inspect relationships
+
+```bash
+npx impactlens ai-context <graph-db> "<graph-id>" --compact
+```
+
+Use it when callers, callees, implementations, dependencies, or inheritance remain unclear.
+
+## Assess change impact
+
+```bash
+npx impactlens change-impact <graph-db> "<graph-id>"
+```
+
+Use `change-impact` or `impact` only when the affected surface is not already evident from inspected code.
+
+## Analyze a ticket
+
+`analyze:ticket` is optional.
+
+Use it only when:
+
+* the ticket contains concrete technical anchors
+* several possible entrypoints exist
+* ranked suggestions would materially help
+
+Treat returned entrypoints as hypotheses and verify them in code.
+
+---
+
+# Stop rule
+
+Stop using graph commands once the likely implementation or root-cause area is known.
+
+Continue with:
+
+* targeted search
+* direct code reading
+* framework-specific inspection
+* configuration
+* migrations
+* tests and fixtures
+* implementation
+* validation
+
+Fallback repository search is normal and does not automatically mean ImpactLens failed.
+
+---
+
+# Command integrity
+
+Preserve the real ImpactLens exit code.
+
+Avoid pipelines where commands such as `head` hide failures:
+
+```bash
+npx impactlens find <graph-db> PaymentController 2>&1 | head -40
+```
+
+When limiting output, enable pipe failure handling:
+
+```bash
+set -o pipefail
+npx impactlens find <graph-db> PaymentController 2>&1 | head -40
+```
+
+Alternatively, capture the complete output and shorten only its summary.
+
+Do not treat an error message as success because a pipeline returned exit code `0`.
+
+Do not run unsupported metadata commands such as:
+
+```bash
+npx impactlens --version
+```
+
+unless support is documented or the task explicitly requires the attempt.
+
+Metadata commands are not repository-navigation commands.
+
+---
+
+# Repository verification
+
+Verify graph findings directly in repository code.
+
+The graph may not fully represent:
+
+* configuration values
+* SQL and migrations
+* framework lifecycle behavior
+* templates
+* test fixtures
+* dynamic dispatch
+* reflection
+* generated code
+* runtime state
+* external integrations
+
+Never edit code solely because a graph result suggested it.
+
+---
+
+# Evaluating usefulness
+
+Evaluate ImpactLens from the actual sequence of actions, not merely from command success.
+
+ImpactLens materially helped when it:
+
+* identified the first relevant symbol or file
+* replaced a broad search with a focused entrypoint
+* revealed a relevant route, service, caller, dependency, or field flow
+* identified an affected area that influenced the solution
+* materially reduced uncertainty about what to inspect next
+
+ImpactLens did not materially help when:
+
+* normal search already found and opened the same file
+* inspected code already revealed the same flow
+* the result repeated an already verified fact
+* the result was not used
+* the command ran only after implementation locations were already known
+
+Example:
+
+```text
+grep finds and opens DownloadUrlController
+ImpactLens later finds DownloadUrlController
+
+Assessment:
+redundant confirmation
+```
+
+Example:
+
+```text
+ImpactLens finds DownloadUrlController
+the controller is opened
+targeted search then finds the CMS form
+
+Assessment:
+ImpactLens supplied the first backend entrypoint;
+fallback search completed the investigation
+```
+
+Example:
+
+```text
+grep finds the controller
+ImpactLens trace reveals a non-obvious service later changed
+
+Assessment:
+ImpactLens did not find the first file,
+but materially improved flow discovery
+```
+
+Do not describe a later confirmation as the original discovery.
+
+---
+
+# Feedback
+
+Record feedback once per task when ImpactLens was used or meaningfully evaluated.
+
+## Destination precedence
+
+When task instructions provide a feedback schema or destination:
+
+* use that schema and destination
+* do not also write the default feedback file
+
+Otherwise append one JSON line to:
+
+```text
+.ai/impactlens/impactlens-feedback.jsonl
+```
+
+Do not replace existing lines.
+
+## Allowed values
+
+`primaryCommand`:
+
+```text
+find
+trace
+ai-context
+change-impact
+impact
+analyze:ticket
+architecture
+risk
+hotspots
+cycles
+dead-code
+none
+```
+
+`reason`:
+
+```text
+helpful
+minor-confirmation
+redundant-confirmation
+wrong-workflow
+wrong-files
+missing-files
+wrong-flow-path
+no-useful-results
+graph-incomplete
+environment
+not-used
+```
+
+`benchmarkImpact`:
+
+```text
+positive
+neutral
+negative
+unknown
+```
+
+## Feedback rules
+
+* `commandsUsed`: actual ImpactLens commands in chronological order
+* `primaryCommand`: command that contributed most, otherwise `none`
+* `query`: actual most important query
+* `helpful`: `true` only when navigation materially improved
+* `reason`: classify the actual contribution or failure
+* `benchmarkImpact`: observed impact on the run
+* `usageNote`: explain discovery versus confirmation using chronology
+* `fallbackSearchUsed`: `true` when normal search was needed alongside or after ImpactLens
+* `fallbackNote`: explain what normal search located
+* `readFirst`: files or symbols first suggested by ImpactLens
+* `actual`: files or symbols actually inspected and found relevant
+* `affectedCode`: files ultimately changed or directly affected
+
+Do not copy all changed files into `actual` unless they were genuinely inspected.
+
+Do not mark ImpactLens helpful merely because it was executed successfully.
+
+## Typical classifications
+
+```text
+ImpactLens provided a useful first entrypoint or non-obvious flow:
+helpful=true
+reason=helpful
+benchmarkImpact=positive
+```
+
+```text
+ImpactLens added limited context but did not change the path:
+helpful=false
+reason=minor-confirmation
+benchmarkImpact=neutral
+```
+
+```text
+ImpactLens repeated already known information:
+helpful=false
+reason=redundant-confirmation
+benchmarkImpact=neutral or negative
+```
+
+```text
+ImpactLens was reasonably unnecessary:
+helpful=false
+reason=not-used
+benchmarkImpact=neutral
+primaryCommand=none
+```
+
+## Environment failures
+
+When no meaningful graph result is produced because of an execution problem:
 
 ```json
 {
-  "timestamp": "2026-06-22T12:00:00Z",
-  "command": "trace",
-  "ticket": "inline",
-  "summary": "Article reading time estimate feature",
-  "ticket_topic": "ui",
-  "change_includes": "backend_logic",
-  "scopes": "php",
-  "helpful": true,
-  "reason": "helpful",
-  "readFirst": ["App\\Helpers\\Input\\TextExtractor::countAllWords"],
-  "actual": [
-    "App\\Helpers\\Input\\TextExtractor",
-    "App\\Helpers\\Pages\\Seo\\SeoNewsHelper::getPageInfo",
-    "cms/resources/views/cms/Element/Laola1/NewsElement/NewsElement.blade.php"
-  ]
-  {
-  "command": "trace",
-  "query": "App\\Helpers\\Input\\TextExtractor::countAllWords",
-  "usageNote": "Used trace to follow callers from the known word-count method into the SEO helper and CMS view.",
-  "fallbackSearchUsed": true,
-  "fallbackNote": "Used repository search afterwards to verify the exact Blade integration."
-}
+  "helpful": false,
+  "reason": "environment",
+  "benchmarkImpact": "unknown",
+  "failure": {
+    "category": "sandbox-permission",
+    "details": "tsx could not create its IPC pipe.",
+    "command": "find",
+    "query": "MultiviewController"
+  }
 }
 ```
 
-**`command`:** `find` · `trace` · `ai-context` · `change-impact` · `impact` · `analyze:ticket` · `architecture` · `risk` · `hotspots` · `cycles` · `dead-code` · `none`
+When an early invocation fails but later commands produce useful results:
 
-**`reason` when helpful:** `helpful`
-
-**`reason` when not:** `wrong-workflow` · `wrong-files` · `missing-files` · `wrong-flow-path` · `no-useful-results` · `graph-incomplete`
-
-**`query`:** Symbol, Route oder Suchbegriff, der dem Command übergeben wurde.
-
-**`usageNote`:** Kurz erklären, warum dieser Command verwendet wurde und was davon erwartet wurde.
-
-**`fallbackSearchUsed`:** Ob danach Repo-Suche oder Grep verwendet wurde.
-
-**`fallbackNote`:** Warum zusätzliche Suche nötig war.
-
-Record ImpactLens suggestions in `readFirst`, what you actually opened in `actual`.
+* record the failed invocation
+* mention it as a limitation
+* evaluate overall usefulness from the successful contribution
+* do not classify the whole task as an environment failure
 
 ---
 
-# Rules
+# Final principles
 
-* ImpactLens is a **navigation tool** — not an analysis oracle.
-* Default: **`find` → `trace` → `ai-context`**. Not `analyze:ticket`.
-* Use `analyze:ticket` only when concrete anchors make ranked hints worthwhile.
-* For mixed tickets, navigate each feature anchor separately.
-* Never treat graph or briefing output as source of truth — verify in code.
-* Record feedback once per task when usage can be meaningfully evaluated.
+* ImpactLens is a navigation tool, not an oracle.
+* Resolve the graph path before querying it.
+* Use the cheapest reliable navigation method.
+* Prefer `find` before broad search when a concrete code anchor exists but its location is unclear.
+* Use each graph command to answer a concrete unanswered question.
+* Stop graph navigation once the implementation or root-cause area is known.
+* Verify graph results directly in code.
+* Preserve real failures and exit codes.
+* Evaluate usefulness from actual chronology.
+* Record feedback once without duplicates.

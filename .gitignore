@@ -28,3 +28,11 @@ project/
 
 tickets/*
 !tickets/README.md
+
+# Benchmark artifacts (local runs, summaries, failed runs)
+benchmarkFiles/
+benchmarkSummary/
+feedback/
+impactlensFeedback/
+summary/
+failedImpact/
