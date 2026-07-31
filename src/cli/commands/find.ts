@@ -1,6 +1,8 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import { searchNodes, type SearchKind } from "../../graph/queries/searchNodes";
+import { suggestFollowUpQueries } from "../../graph/queries/searchQueryVariants";
+import { suggestRouteFollowUpQueries } from "../../graph/queries/routeSearchVariants";
 import { shortNavigationLabel } from "../../graph/queries/navigationQueries";
 import { getIntOption, getOptionValue, hasFlag } from "../shared/cliArgs";
 
@@ -34,8 +36,30 @@ try {
     }
 
     if (matches.length === 0) {
+        const effectiveKind = kind === "auto"
+            ? (/\b(get|post|put|patch|delete)\s+\//i.test(query) || query.includes("/") ? "route" : kind)
+            : kind;
+        const suggestions = effectiveKind === "route"
+            ? suggestRouteFollowUpQueries(query)
+            : suggestFollowUpQueries(query);
+
         console.log(`No matches for "${query}" (kind=${kind}).`);
-        console.log("Try --kind=route for paths like POST /payments, or --kind=field for request/model fields.");
+        if (suggestions.length > 0) {
+            console.log("Try these normalized queries:");
+            for (const suggestion of suggestions) {
+                const suggestionKind = effectiveKind === "route" ? "route" : kind;
+                console.log(`  impactlens find ${dbPath} "${suggestion}" --kind=${suggestionKind}`);
+            }
+        }
+        if (effectiveKind === "route") {
+            console.log("Route tips: ticket URLs often include /api/v3 — the graph stores paths without that prefix.");
+            console.log("Use path suffixes like config/settings, multiview, or related-contents.");
+        } else if (effectiveKind === "field") {
+            console.log("Field tips: only fields present in the scanned graph are searchable.");
+            console.log("If the symbol is new, search by controller/class name instead.");
+        } else {
+            console.log("Try --kind=route for paths like POST /payments, --kind=field for request/model fields, or --kind=all to widen search.");
+        }
         process.exit(1);
     }
 

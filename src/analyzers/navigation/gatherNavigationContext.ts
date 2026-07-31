@@ -15,6 +15,7 @@ import {
     findIncomingBladeActions,
     findIncomingGraphEntries,
     findIncomingRoutes,
+    findIncomingRoutesForClass,
     findMethodScopedEdges,
     findOutgoingEdgesByType,
     findRouteScopedGraphEntries,
@@ -80,7 +81,7 @@ export function gatherNavigationContext(
     } else if (target.type === "class") {
         const methodIds = findMethodsByParent(db, target.id).slice(0, 8);
         partial = {
-            routeEntries: [],
+            routeEntries: findIncomingRoutesForClass(db, target.id, limit),
             bladeEntries: [],
             graphEntries: [],
             httpUpstream: [],

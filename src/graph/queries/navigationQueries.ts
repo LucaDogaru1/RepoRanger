@@ -279,6 +279,29 @@ export function findIncomingRoutes(
     }));
 }
 
+export function findIncomingRoutesForClass(
+    db: SQLiteDatabase,
+    classId: string,
+    limit: number,
+): RouteEntryRow[] {
+    const rows = db.prepare(`
+        SELECT e.from_id AS endpoint_id, e.to_id AS controller_method
+        FROM edges e
+        WHERE e.type = 'ROUTES_TO'
+          AND e.to_id LIKE ? ESCAPE '\\'
+        ORDER BY e.from_id ASC
+        LIMIT ?
+    `).all(`${classId.replace(/[%_\\]/g, "\\$&")}::%`, limit) as Array<{
+        endpoint_id: string;
+        controller_method: string;
+    }>;
+
+    return rows.map(row => ({
+        endpointId: row.endpoint_id,
+        controllerMethod: row.controller_method,
+    }));
+}
+
 export function findHttpUpstream(
     db: SQLiteDatabase,
     methodId: string,

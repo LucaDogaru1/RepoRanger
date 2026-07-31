@@ -1,4 +1,16 @@
 import Database from "better-sqlite3";
+import {
+    buildRouteSearchPlan,
+    isLowSignalRouteFile,
+    isProductionRouteFile,
+    ROUTE_SEARCH_LIMITS,
+    type RouteSearchPlan,
+} from "./routeSearchVariants";
+import {
+    buildSearchQueryVariants,
+    type QueryVariant,
+    VARIANT_SCORE_BONUS,
+} from "./searchQueryVariants";
 
 type SQLiteDatabase = InstanceType<typeof Database>;
 
@@ -17,6 +29,13 @@ export interface SearchOptions {
     kind?: SearchKind;
     limit?: number;
 }
+
+type NodeRow = {
+    id: string;
+    type: string;
+    name: string | null;
+    file: string | null;
+};
 
 const SYMBOL_TYPES = new Set([
     "class",
@@ -85,7 +104,7 @@ function typesForKind(kind: SearchKind): string[] | null {
 
 function scoreMatch(
     query: string,
-    row: { id: string; type: string; name: string | null; file: string | null },
+    row: NodeRow,
 ): { score: number; matchReason: string } {
     const q = query.toLowerCase();
     const id = row.id.toLowerCase();
@@ -131,68 +150,282 @@ function scoreMatch(
     return { score: 0, matchReason: "weak match" };
 }
 
-function routeQueryVariants(query: string): string[] {
-    const variants = new Set<string>();
-    variants.add(query);
+function scoreMatchAgainstVariants(
+    variants: QueryVariant[],
+    row: NodeRow,
+): { score: number; matchReason: string } {
+    let best = { score: 0, matchReason: "weak match" };
 
-    const verbPath = query.match(/^(get|post|put|patch|delete)\s+(\S+)/i);
-    if (verbPath) {
-        variants.add(`${verbPath[1]!.toUpperCase()}:${verbPath[2]}`);
-        variants.add(verbPath[2]!);
+    for (const variant of variants) {
+        const scored = scoreMatch(variant.text, row);
+        const bonus = VARIANT_SCORE_BONUS[variant.source];
+        const totalScore = scored.score + bonus;
+        if (totalScore > best.score) {
+            best = {
+                score: totalScore,
+                matchReason: `${scored.matchReason} via ${variant.source}:${variant.text}`,
+            };
+        }
     }
 
-    if (query.startsWith("/")) {
-        variants.add(`%:${query.slice(1)}%`);
-        variants.add(`%${query}%`);
-    }
-
-    return [...variants];
+    return best;
 }
 
-export function searchNodes(
-    db: SQLiteDatabase,
-    rawQuery: string,
-    options?: SearchOptions,
-): SearchMatch[] {
-    const query = normalizeQuery(rawQuery);
-    if (!query) {
-        return [];
+function routePathFromId(id: string): string {
+    const colon = id.indexOf(":", 4);
+    if (id.startsWith("api:") && colon > 0) {
+        return id.slice(colon + 1);
+    }
+    return id;
+}
+
+function routeVerbFromId(id: string): string | null {
+    if (!id.startsWith("api:")) {
+        return null;
     }
 
-    const kind = detectKind(query, options?.kind);
-    const limit = options?.limit ?? 20;
-    const types = typesForKind(kind);
-    const like = `%${escapeLike(query)}%`;
+    const colon = id.indexOf(":", 4);
+    if (colon <= 0) {
+        return null;
+    }
 
-    let rows: Array<{ id: string; type: string; name: string | null; file: string | null }>;
+    return id.slice(4, colon).toUpperCase();
+}
 
-    if (kind === "route") {
-        const routePatterns = routeQueryVariants(query).map(v => `%${escapeLike(v)}%`);
-        const clauses = routePatterns.map(() => "id LIKE ? ESCAPE '\\'").join(" OR ");
-        rows = db.prepare(`
+function matchesNormalizedPath(id: string, normalizedPaths: string[]): boolean {
+    const routePath = routePathFromId(id);
+    const lowerRoutePath = routePath.toLowerCase();
+
+    return normalizedPaths.some(path => {
+        const lowerPath = path.toLowerCase();
+        return lowerRoutePath === lowerPath
+            || lowerRoutePath.endsWith(`:${lowerPath}`)
+            || lowerRoutePath.endsWith(lowerPath);
+    });
+}
+
+function applyVerbScoring(
+    id: string,
+    score: number,
+    verb: string | undefined,
+): { score: number; verbReason?: string } {
+    if (!verb || score <= 0) {
+        return { score };
+    }
+
+    const routeVerb = routeVerbFromId(id);
+    if (!routeVerb) {
+        return { score };
+    }
+
+    if (routeVerb === verb) {
+        return { score: score + 200, verbReason: "matching HTTP verb" };
+    }
+
+    return { score: score - 300, verbReason: "mismatched HTTP verb" };
+}
+
+function applyFileScoring(
+    file: string | null,
+    score: number,
+    matchReason: string,
+): { score: number; matchReason: string } {
+    let nextScore = score;
+    let nextReason = matchReason;
+
+    if (isProductionRouteFile(file)) {
+        nextScore += 150;
+        nextReason += ", production routes file";
+    }
+    if (isLowSignalRouteFile(file)) {
+        nextScore -= 600;
+        nextReason += ", test/k6 route file";
+    }
+
+    return { score: nextScore, matchReason: nextReason };
+}
+
+function scoreRouteMatch(
+    row: NodeRow,
+    plan: RouteSearchPlan,
+): { score: number; matchReason: string } {
+    if (plan.exactIds.includes(row.id)) {
+        const exact = applyFileScoring(row.file, 1500, "exact route id");
+        const withVerb = applyVerbScoring(row.id, exact.score, plan.verb);
+        return {
+            score: withVerb.score,
+            matchReason: withVerb.verbReason
+                ? `${exact.matchReason}, ${withVerb.verbReason}`
+                : exact.matchReason,
+        };
+    }
+
+    const id = row.id;
+    let score = 0;
+    let matchReason = "weak match";
+
+    if (plan.verb && id.toUpperCase().startsWith(`API:${plan.verb}:`) && matchesNormalizedPath(id, plan.normalizedPaths)) {
+        score = 1400;
+        matchReason = "matching HTTP verb and full route path";
+    } else if (matchesNormalizedPath(id, plan.normalizedPaths)) {
+        score = 1200;
+        matchReason = "full route path match";
+    } else {
+        for (const path of plan.normalizedPaths) {
+            const lowerPath = path.toLowerCase();
+            const routePath = routePathFromId(id).toLowerCase();
+            if (routePath.endsWith(lowerPath) || routePath.endsWith(`/${lowerPath}`)) {
+                score = 1000;
+                matchReason = "route path suffix match";
+                break;
+            }
+        }
+    }
+
+    if (score === 0) {
+        for (const term of plan.pathTerms) {
+            const lower = term.toLowerCase();
+            if (id.toLowerCase().includes(lower)) {
+                const termScore = 500 + lower.length * 10;
+                if (termScore > score) {
+                    score = termScore;
+                    matchReason = `path term ${term}`;
+                }
+            }
+        }
+    }
+
+    if (score === 0) {
+        return { score: 0, matchReason: "weak match" };
+    }
+
+    const withVerb = applyVerbScoring(id, score, plan.verb);
+    if (withVerb.verbReason) {
+        matchReason += `, ${withVerb.verbReason}`;
+    }
+
+    return applyFileScoring(row.file, withVerb.score, matchReason);
+}
+
+function fetchRouteRowsByPatterns(
+    db: SQLiteDatabase,
+    patterns: string[],
+    limit: number,
+): NodeRow[] {
+    const rows: NodeRow[] = [];
+
+    for (const pattern of patterns) {
+        const batch = db.prepare(`
             SELECT id, type, name, file
             FROM nodes
             WHERE type IN ('api_endpoint', 'route_name')
-              AND (${clauses})
-            LIMIT 200
-        `).all(...routePatterns) as typeof rows;
-    } else {
-        const typeClause = types
-            ? `AND type IN (${types.map(() => "?").join(", ")})`
-            : "";
-        rows = db.prepare(`
+              AND id LIKE ? ESCAPE '\\'
+            ORDER BY id ASC
+            LIMIT ?
+        `).all(pattern, limit) as NodeRow[];
+
+        rows.push(...batch);
+    }
+
+    return rows;
+}
+
+function fetchRouteRows(
+    db: SQLiteDatabase,
+    plan: RouteSearchPlan,
+): NodeRow[] {
+    const rowsById = new Map<string, NodeRow>();
+
+    for (const id of plan.exactIds) {
+        const row = db.prepare(`
             SELECT id, type, name, file
             FROM nodes
-            WHERE (
-                id LIKE ? ESCAPE '\\'
-                OR IFNULL(name, '') LIKE ? ESCAPE '\\'
-                OR IFNULL(file, '') LIKE ? ESCAPE '\\'
-            )
-            ${typeClause}
-            LIMIT 300
-        `).all(
-            ...(types ? [like, like, like, ...types] : [like, like, like]),
-        ) as typeof rows;
+            WHERE id = ?
+            LIMIT 1
+        `).get(id) as NodeRow | undefined;
+
+        if (row) {
+            rowsById.set(row.id, row);
+        }
+    }
+
+    for (const row of fetchRouteRowsByPatterns(
+        db,
+        plan.fullPathPatterns,
+        ROUTE_SEARCH_LIMITS.fullPathPattern,
+    )) {
+        rowsById.set(row.id, row);
+    }
+
+    for (const row of fetchRouteRowsByPatterns(
+        db,
+        plan.segmentPatterns,
+        ROUTE_SEARCH_LIMITS.segmentPattern,
+    )) {
+        rowsById.set(row.id, row);
+    }
+
+    return [...rowsById.values()];
+}
+
+function buildLikePatterns(variants: QueryVariant[]): string[] {
+    const patterns = new Set<string>();
+    for (const variant of variants) {
+        patterns.add(`%${escapeLike(variant.text)}%`);
+    }
+    return [...patterns];
+}
+
+function fetchSymbolRows(
+    db: SQLiteDatabase,
+    patterns: string[],
+    types: string[] | null,
+): NodeRow[] {
+    if (patterns.length === 0) {
+        return [];
+    }
+
+    const clauses: string[] = [];
+    const params: string[] = [];
+
+    for (const pattern of patterns) {
+        clauses.push(`(
+            id LIKE ? ESCAPE '\\'
+            OR IFNULL(name, '') LIKE ? ESCAPE '\\'
+            OR IFNULL(file, '') LIKE ? ESCAPE '\\'
+        )`);
+        params.push(pattern, pattern, pattern);
+    }
+
+    const typeClause = types
+        ? `AND type IN (${types.map(() => "?").join(", ")})`
+        : "";
+
+    return db.prepare(`
+        SELECT id, type, name, file
+        FROM nodes
+        WHERE (${clauses.join(" OR ")})
+        ${typeClause}
+        LIMIT 300
+    `).all(...params, ...(types ?? [])) as NodeRow[];
+}
+
+function runSearch(
+    db: SQLiteDatabase,
+    query: string,
+    options: SearchOptions | undefined,
+    variants: QueryVariant[],
+): SearchMatch[] {
+    const kind = detectKind(query, options?.kind);
+    const limit = options?.limit ?? 20;
+    const types = typesForKind(kind);
+    let rows: NodeRow[];
+    const routePlan = kind === "route" ? buildRouteSearchPlan(query) : null;
+
+    if (routePlan) {
+        rows = fetchRouteRows(db, routePlan);
+    } else {
+        rows = fetchSymbolRows(db, buildLikePatterns(variants), types);
     }
 
     const exact = db.prepare(`
@@ -200,7 +433,7 @@ export function searchNodes(
         FROM nodes
         WHERE id = ?
         LIMIT 1
-    `).get(query) as typeof rows[number] | undefined;
+    `).get(query) as NodeRow | undefined;
 
     if (exact) {
         rows = [exact, ...rows.filter(row => row.id !== exact.id)];
@@ -208,7 +441,12 @@ export function searchNodes(
 
     const scored = rows
         .map(row => {
-            const { score, matchReason } = scoreMatch(query, row);
+            if (routePlan) {
+                const { score, matchReason } = scoreRouteMatch(row, routePlan);
+                return { ...row, score, matchReason };
+            }
+
+            const { score, matchReason } = scoreMatchAgainstVariants(variants, row);
             return { ...row, score, matchReason };
         })
         .filter(row => row.score > 0)
@@ -228,4 +466,43 @@ export function searchNodes(
     }
 
     return result;
+}
+
+export function searchNodes(
+    db: SQLiteDatabase,
+    rawQuery: string,
+    options?: SearchOptions,
+): SearchMatch[] {
+    const query = normalizeQuery(rawQuery);
+    if (!query) {
+        return [];
+    }
+
+    const variants = buildSearchQueryVariants(query);
+    const resolvedKind = detectKind(query, options?.kind);
+    const primary = runSearch(db, query, options, variants);
+    if (primary.length > 0) {
+        return primary;
+    }
+
+    if (resolvedKind === "route") {
+        return [];
+    }
+
+    if (options?.kind !== "all") {
+        const widened = runSearch(db, query, { ...options, kind: "all" }, variants);
+        if (widened.length > 0) {
+            return widened;
+        }
+    }
+
+    const tokenVariants = variants.filter(variant => variant.source === "token");
+    if (tokenVariants.length > 0) {
+        const tokenResults = runSearch(db, query, { ...options, kind: "all" }, tokenVariants);
+        if (tokenResults.length > 0) {
+            return tokenResults;
+        }
+    }
+
+    return [];
 }

@@ -1,9 +1,0 @@
-Title:
-Hero not showing correctly
-
-Description:
-Marketing says the hero section is wrong on some pages.
-
-Looks fine in CMS but frontend does not match.
-
-Can someone check?
