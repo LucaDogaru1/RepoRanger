@@ -449,8 +449,18 @@ export function preferConcreteCallTargets<T extends { id: string }>(calls: T[]):
 
     const result: T[] = [];
     for (const group of byMethod.values()) {
-        const concrete = group.find(item => !item.id.includes("Interface"));
-        result.push(concrete ?? group[0]!);
+        const interfaces = group.filter(item => item.id.includes("Interface"));
+        const concretes = group.filter(item => !item.id.includes("Interface"));
+
+        if (interfaces.length > 0 && concretes.length > 0) {
+            result.push(...concretes);
+        } else if (concretes.length > 1) {
+            result.push(...concretes);
+        } else if (concretes.length === 1) {
+            result.push(concretes[0]!);
+        } else {
+            result.push(group[0]!);
+        }
     }
 
     return result.sort((a, b) => a.id.localeCompare(b.id));

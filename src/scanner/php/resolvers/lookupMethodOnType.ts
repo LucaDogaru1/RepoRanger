@@ -22,6 +22,27 @@ export function extendsParentByClass(classId: string): string | undefined {
     return undefined;
 }
 
+export function isSameOrAncestorClass(ancestorId: string, descendantId: string): boolean {
+    if (ancestorId === descendantId) {
+        return true;
+    }
+
+    let currentClassId: string | undefined = descendantId;
+    const visited = new Set<string>();
+
+    while (currentClassId && !visited.has(currentClassId)) {
+        visited.add(currentClassId);
+
+        if (currentClassId === ancestorId) {
+            return true;
+        }
+
+        currentClassId = extendsParentByClass(currentClassId);
+    }
+
+    return false;
+}
+
 export function lookupMethodTarget(classId: string, methodName: string): string | undefined {
     let currentClassId: string | undefined = classId;
     const visited = new Set<string>();

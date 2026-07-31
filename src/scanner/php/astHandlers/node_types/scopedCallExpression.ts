@@ -226,7 +226,7 @@ function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
         return;
     }
 
-    if (verb === "resource" || verb === "apiResource") {
+    if (isResourceVerb(verb)) {
         const basePath = strings[0];
         if (!basePath) {
             return;
@@ -234,7 +234,7 @@ function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
 
         recordRoutes(
             expandResourceRoutes(
-                verb,
+                verb.toLowerCase() === "apiresource" ? "apiResource" : "resource",
                 basePath,
                 controllerRef.controller,
                 "",
@@ -249,9 +249,7 @@ function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
         return;
     }
 
-    const action = controllerRef.action === "__invoke"
-        ? strings[strings.length - 1] ?? "__invoke"
-        : controllerRef.action;
+    const action = controllerRef.action;
 
     recordRoutes([
         buildSingleRoute(
@@ -288,14 +286,28 @@ function readControllerReferenceFromNode(
 }
 
 function readRouteModifiersFromText(text: string): { only?: string[]; except?: string[] } {
-    const onlyMatch = text.match(/->only\s*\(\s*\[([^\]]+)\]/);
-    const exceptMatch = text.match(/->except\s*\(\s*\[([^\]]+)\]/);
-    const readList = (raw: string): string[] =>
+    const readActions = (raw: string): string[] =>
         [...raw.matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]!);
 
+    const readMethod = (method: "only" | "except"): string[] | undefined => {
+        const arrayMatch = text.match(new RegExp(`->${method}\\s*\\(\\s*\\[([^\\]]+)\\]`));
+        if (arrayMatch) {
+            const actions = readActions(arrayMatch[1]!);
+            return actions.length > 0 ? actions : undefined;
+        }
+
+        const parenMatch = text.match(new RegExp(`->${method}\\s*\\(([^)]+)\\)`));
+        if (parenMatch) {
+            const actions = readActions(parenMatch[1]!);
+            return actions.length > 0 ? actions : undefined;
+        }
+
+        return undefined;
+    };
+
     return {
-        only: onlyMatch ? readList(onlyMatch[1]!) : undefined,
-        except: exceptMatch ? readList(exceptMatch[1]!) : undefined,
+        only: readMethod("only"),
+        except: readMethod("except"),
     };
 }
 

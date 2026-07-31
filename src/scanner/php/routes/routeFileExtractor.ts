@@ -37,6 +37,19 @@ function extractBalancedParentheses(source: string, openIndex: number): string |
     return null;
 }
 
+function normalizeRouteVerb(verb: string): string {
+    return verb.toLowerCase();
+}
+
+function isResourceVerb(verb: string): boolean {
+    const normalized = normalizeRouteVerb(verb);
+    return normalized === "resource" || normalized === "apiresource";
+}
+
+function resourceVerbForExpander(verb: string): "resource" | "apiResource" {
+    return normalizeRouteVerb(verb) === "apiresource" ? "apiResource" : "resource";
+}
+
 function readStringLiterals(value: string): string[] {
     const strings: string[] = [];
 
@@ -70,17 +83,32 @@ function readControllerReference(
     return null;
 }
 
+function readModifierActionList(raw: string): string[] {
+    return [...raw.matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]!);
+}
+
+function readRouteModifierActions(tail: string, method: "only" | "except"): string[] | undefined {
+    const arrayMatch = tail.match(new RegExp(`^\\s*->${method}\\s*\\(\\s*\\[([^\\]]+)\\]`));
+    if (arrayMatch) {
+        const actions = readModifierActionList(arrayMatch[1]!);
+        return actions.length > 0 ? actions : undefined;
+    }
+
+    const parenMatch = tail.match(new RegExp(`^\\s*->${method}\\s*\\(([^)]+)\\)`));
+    if (parenMatch) {
+        const actions = readModifierActionList(parenMatch[1]!);
+        return actions.length > 0 ? actions : undefined;
+    }
+
+    return undefined;
+}
+
 function readRouteModifiers(source: string, startIndex: number): { only?: string[]; except?: string[] } {
     const tail = source.slice(startIndex);
-    const onlyMatch = tail.match(/^\s*->only\s*\(\s*\[([^\]]+)\]/);
-    const exceptMatch = tail.match(/^\s*->except\s*\(\s*\[([^\]]+)\]/);
-
-    const readList = (raw: string): string[] =>
-        [...raw.matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]!);
 
     return {
-        only: onlyMatch ? readList(onlyMatch[1]!) : undefined,
-        except: exceptMatch ? readList(exceptMatch[1]!) : undefined,
+        only: readRouteModifierActions(tail, "only"),
+        except: readRouteModifierActions(tail, "except"),
     };
 }
 
@@ -136,14 +164,14 @@ function parseRouteCall(
         return [];
     }
 
-    if (verb === "resource" || verb === "apiResource") {
+    if (isResourceVerb(verb)) {
         const basePath = strings[0] ?? "";
         if (!basePath) {
             return [];
         }
 
         return expandResourceRoutes(
-            verb,
+            resourceVerbForExpander(verb),
             basePath,
             controllerRef.controller,
             prefix,
@@ -156,9 +184,7 @@ function parseRouteCall(
         return [];
     }
 
-    const action = controllerRef.action === "__invoke"
-        ? path.split("/").filter(Boolean).pop() ?? "__invoke"
-        : controllerRef.action;
+    const action = controllerRef.action;
 
     return [
         buildSingleRoute(

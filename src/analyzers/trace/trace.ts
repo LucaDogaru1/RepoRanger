@@ -4,15 +4,16 @@ import { analyzeChangeImpact, type ChangeImpactResult } from "../impact/ImpactSc
 import {
     findIncomingCalls,
     findNode,
-    findOutgoingCalls,
-    GraphNodeRow,
     resolveMethodThroughInheritance,
+    GraphNodeRow,
 } from "../../graph/queries/GraphQueries";
 import {
-    filterFrameworkNoise,
+    findOutgoingCallChain,
+    type CallChainRow,
+} from "../../graph/queries/callChainQueries";
+import {
     findRouteControllerMethod,
     formatGraphEntryLabel,
-    preferConcreteCallTargets,
     resolveInterfaceMethodImplementation,
     shortNavigationLabel,
     type GraphEntryRow,
@@ -25,6 +26,7 @@ type SQLiteDatabase = InstanceType<typeof Database>;
 
 export interface TraceCallRow {
     id: string;
+    depth: number;
     resolvedTo?: string;
     file: string | null;
 }
@@ -45,12 +47,14 @@ export interface TraceResult {
     changeImpact: ChangeImpactResult;
     incomingCalls: TraceCallRow[];
     outgoingCalls: TraceCallRow[];
+    outgoingCallsTruncated: boolean;
     flowLines: string[];
     coverage: TraceCoverage;
     reads: NavigationEdgeRow[];
 }
 
 export interface TraceOptions {
+    depth?: number;
     limit?: number;
     includeInterfaceResolved?: boolean;
 }
@@ -79,30 +83,38 @@ function resolveTarget(db: SQLiteDatabase, query: string): { target: GraphNodeRo
     return { target, matchReason: top.matchReason };
 }
 
-function buildOutgoingCalls(db: SQLiteDatabase, analysisNodeId: string, options: TraceOptions): TraceCallRow[] {
+function buildOutgoingCalls(
+    db: SQLiteDatabase,
+    analysisNodeId: string,
+    options: TraceOptions,
+): { calls: TraceCallRow[]; truncated: boolean } {
     const limit = options.limit ?? 20;
-    const raw = filterFrameworkNoise(
-        preferConcreteCallTargets(
-            findOutgoingCalls(db, analysisNodeId, {
-                includeInterfaceResolved: options.includeInterfaceResolved,
-                limit,
-            }).map(call => ({ id: call.id, file: call.file })),
-        ),
-    );
-
-    return raw.map(call => {
-        const resolvedTo = call.id.includes("Interface")
-            ? resolveInterfaceMethodImplementation(db, call.id) ?? undefined
-            : !call.file
-                ? resolveMethodThroughInheritance(db, call.id) ?? undefined
-                : undefined;
-
-        return {
-            id: call.id,
-            file: call.file,
-            resolvedTo: resolvedTo && resolvedTo !== call.id ? resolvedTo : undefined,
-        };
+    const depth = options.depth ?? 2;
+    const chain = findOutgoingCallChain(db, analysisNodeId, {
+        depth,
+        limit,
+        includeInterfaceResolved: options.includeInterfaceResolved,
     });
+
+    return {
+        calls: chain.calls.map(call => mapCallChainRow(db, call)),
+        truncated: chain.truncated,
+    };
+}
+
+function mapCallChainRow(db: SQLiteDatabase, call: CallChainRow): TraceCallRow {
+    const resolvedTo = call.id.includes("Interface")
+        ? resolveInterfaceMethodImplementation(db, call.id) ?? undefined
+        : !call.file
+            ? resolveMethodThroughInheritance(db, call.id) ?? undefined
+            : undefined;
+
+    return {
+        id: call.id,
+        depth: call.depth,
+        file: call.file,
+        resolvedTo: resolvedTo && resolvedTo !== call.id ? resolvedTo : undefined,
+    };
 }
 
 function buildFlowLines(input: {
@@ -139,9 +151,10 @@ function buildFlowLines(input: {
         lines.push(`  → validates ${fields.join(", ")}`);
     }
 
-    for (const call of input.outgoingCalls.slice(0, 6)) {
+    for (const call of input.outgoingCalls.slice(0, 10)) {
         const label = call.resolvedTo ? shortNavigationLabel(call.resolvedTo) : shortNavigationLabel(call.id);
-        lines.push(`  → calls ${label}`);
+        const indent = "  ".repeat(call.depth);
+        lines.push(`${indent}→ calls ${label}`);
     }
 
     for (const edge of input.navigation.fieldFlowsOut.slice(0, 4)) {
@@ -241,6 +254,7 @@ export function buildTrace(
     options?: TraceOptions,
 ): TraceBuildResult {
     const limit = options?.limit ?? 20;
+    const depth = options?.depth ?? 2;
     const includeInterfaceResolved = options?.includeInterfaceResolved ?? false;
 
     const resolved = resolveTarget(db, query);
@@ -254,13 +268,14 @@ export function buildTrace(
         : null;
     const analysisNodeId = controllerMethodId ?? target.id;
 
-    const outgoingCalls = target.type === "method" || controllerMethodId
-        ? buildOutgoingCalls(db, analysisNodeId, { limit, includeInterfaceResolved })
-        : [];
+    const { calls: outgoingCalls, truncated: outgoingCallsTruncated } = target.type === "method" || controllerMethodId
+        ? buildOutgoingCalls(db, analysisNodeId, { depth, limit, includeInterfaceResolved })
+        : { calls: [], truncated: false };
 
     const incomingRaw = findIncomingCalls(db, analysisNodeId, { limit, includeInterfaceResolved });
     const incomingCalls: TraceCallRow[] = incomingRaw.map(call => ({
         id: call.id,
+        depth: 1,
         file: call.file,
     }));
 
@@ -273,7 +288,7 @@ export function buildTrace(
 
     const changeImpact = analyzeChangeImpact(db, analysisNodeId, {
         includeInterfaceResolved,
-        depth: 2,
+        depth,
         limit,
     });
 
@@ -302,6 +317,7 @@ export function buildTrace(
             changeImpact,
             incomingCalls,
             outgoingCalls,
+            outgoingCallsTruncated,
             flowLines,
             coverage,
             reads,

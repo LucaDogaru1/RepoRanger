@@ -15,12 +15,13 @@ const query = process.argv[3];
 const args = process.argv.slice(4);
 
 const limit = getIntOption(args, "--limit", 20, 1);
+const depth = getIntOption(args, "--depth", 2, 1);
 const includeInterfaceResolved = hasFlag(args, "--include-interface-resolved");
 const jsonOutput = hasFlag(args, "--json");
 const outputPath = getOptionValue(args, "--output");
 
 if (!dbPath || !query) {
-    console.log("Usage: impactlens trace <db.sqlite> \"<symbol>\" [--limit=20] [--include-interface-resolved] [--json] [--output=file.txt]");
+    console.log("Usage: impactlens trace <db.sqlite> \"<symbol>\" [--depth=2] [--limit=20] [--include-interface-resolved] [--json] [--output=file.txt]");
     process.exit(2);
 }
 
@@ -29,6 +30,11 @@ const db = new Database(dbPath);
 function section(title: string, color: (text: string) => string): void {
     console.log(chalk.gray("\n──────────────────────────────────────────────"));
     console.log(color(title));
+}
+
+function formatTraceCallLine(call: { id: string; depth: number; resolvedTo?: string }): string {
+    const label = call.resolvedTo ? `${call.id} → ${call.resolvedTo}` : call.id;
+    return `${"  ".repeat(Math.max(0, call.depth - 1))}${label}`;
 }
 
 function bulletLines(items: string[], emptyLabel = "(none)"): void {
@@ -134,14 +140,15 @@ function renderTrace(data: TraceResult): string {
     lines.push("──────────────────────────────────────────────");
     lines.push("Calls");
     lines.push("  outgoing");
-    const outgoingLines = data.outgoingCalls.map(call =>
-        call.resolvedTo ? `${call.id} → ${call.resolvedTo}` : call.id,
-    );
+    const outgoingLines = data.outgoingCalls.map(call => formatTraceCallLine(call));
     if (outgoingLines.length === 0) {
         lines.push("    (none)");
     } else {
         for (const item of outgoingLines) {
             lines.push(`    • ${item}`);
+        }
+        if (data.outgoingCallsTruncated) {
+            lines.push(`    … truncated (--limit=${limit}, increase --depth or --limit for more)`);
         }
     }
     lines.push("  incoming (call-chain)");
@@ -270,11 +277,12 @@ function printTrace(data: TraceResult): void {
     section("Calls", chalk.bold.red);
     console.log(chalk.gray("  outgoing"));
     bulletLines(
-        data.outgoingCalls.map(call =>
-            call.resolvedTo ? `${call.id} → ${call.resolvedTo}` : call.id,
-        ),
+        data.outgoingCalls.map(call => formatTraceCallLine(call)),
         "(none)",
     );
+    if (data.outgoingCallsTruncated) {
+        console.log(chalk.gray(`  … truncated (--limit=${limit}, increase --depth or --limit for more)`));
+    }
     console.log(chalk.gray("  incoming (call-chain)"));
     bulletLines(data.incomingCalls.map(call => call.id), "(none)");
 
@@ -303,7 +311,7 @@ function printTrace(data: TraceResult): void {
 }
 
 try {
-    const result = buildTrace(db, query, { limit, includeInterfaceResolved });
+    const result = buildTrace(db, query, { depth, limit, includeInterfaceResolved });
 
     if (!result.ok) {
         console.log(chalk.red.bold(result.error));

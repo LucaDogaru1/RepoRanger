@@ -9,25 +9,24 @@ import {
     findInheritanceChain,
     findMethodsByParent,
     findNode,
-    findOutgoingCalls,
     getRelationTargetId,
     resolveMethodThroughInheritance,
 } from "../../graph/queries/GraphQueries";
+import { findOutgoingCallChain, type CallChainRow } from "../../graph/queries/callChainQueries";
 import { formatLocation, toBulletList } from "../../shared/formatting/text";
 import { getIntOption, getOptionValue, hasFlag } from "../shared/cliArgs";
 import { buildRiskRanking } from "../shared/riskRanking";
 import { gatherNavigationContext } from "../../analyzers/navigation/gatherNavigationContext";
 import {
-    filterFrameworkNoise,
     findRouteControllerMethod,
     formatGraphEntryLabel,
-    preferConcreteCallTargets,
     resolveInterfaceMethodImplementation,
     shortNavigationLabel,
 } from "../../graph/queries/navigationQueries";
 
 type CallItem = {
     id: string;
+    depth: number;
     callType: string | null;
     via: string | null;
     file: string | null;
@@ -71,6 +70,7 @@ type AiContextPayload = {
     callers: CallItem[];
     graphEntries: Array<{ kind: string; from: string; to: string; file: string | null }>;
     callees: CallItem[];
+    calleesTruncated: boolean;
     dependencies: DependencyItem[];
     inheritance: string[];
     architecture: Array<{
@@ -220,9 +220,54 @@ function renderCalledBySection(payload: AiContextPayload): string[] {
     return lines;
 }
 
-function dedupeCalls(items: CallItem[], limit: number): CallItem[] {
+function formatCalleeLine(item: CallItem): string {
+    const label = item.resolvedTo ? `${item.id} -> ${item.resolvedTo}` : item.id;
+    const fileSuffix = !item.resolvedTo && item.file ? ` (${item.file})` : "";
+    const content = `${label}${fileSuffix}`;
+    if (item.depth <= 1) {
+        return content;
+    }
+    return `${"  ".repeat(item.depth - 1)}- ${content}`;
+}
+
+function renderCalleeLines(callees: CallItem[], truncated = false, resultLimit = 20): string[] {
+    if (callees.length === 0) {
+        return ["- None"];
+    }
+    const lines = callees.map(item => {
+        const line = formatCalleeLine(item);
+        return item.depth <= 1 ? `- ${line}` : line;
+    });
+    if (truncated) {
+        lines.push(`- … truncated (--limit=${resultLimit}, increase --depth or --limit for more)`);
+    }
+    return lines;
+}
+function dedupeIncomingCalls(
+    items: Array<{ id: string; callType: string | null; via: string | null; file: string | null }>,
+    limit: number,
+): Array<{ id: string; callType: string | null; via: string | null; file: string | null }> {
     const seen = new Set<string>();
-    const result: CallItem[] = [];
+    const result: Array<{ id: string; callType: string | null; via: string | null; file: string | null }> = [];
+
+    for (const item of items) {
+        const key = `${item.id}|${item.callType ?? ""}|${item.via ?? ""}`;
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        result.push(item);
+        if (result.length >= limit) {
+            break;
+        }
+    }
+
+    return result;
+}
+
+function dedupeCallChain(items: CallChainRow[], limit: number): CallChainRow[] {
+    const seen = new Set<string>();
+    const result: CallChainRow[] = [];
 
     for (const item of items) {
         const key = `${item.id}|${item.callType ?? ""}|${item.via ?? ""}`;
@@ -329,13 +374,6 @@ if (!dbPath || !targetId) {
 const db = new Database(dbPath);
 
 function renderDefaultMarkdown(payload: AiContextPayload): string {
-    const calls = payload.callees.map(item => {
-        if (item.resolvedTo) {
-            return `${item.id}\n  resolves to: ${item.resolvedTo}`;
-        }
-        return item.file ? `${item.id} (${item.file})` : item.id;
-    });
-
     return [
         "# AI Context",
         "",
@@ -378,9 +416,7 @@ function renderDefaultMarkdown(payload: AiContextPayload): string {
         "",
         ...renderCalledBySection(payload),
         "## Calls",
-        payload.callees.length === 0
-            ? "- None"
-            : toBulletList(calls),
+        ...renderCalleeLines(payload.callees, payload.calleesTruncated, limit),
         "",
         ...renderNavigationSections(payload, false),
         "## Dependencies",
@@ -422,7 +458,6 @@ function renderDefaultMarkdown(payload: AiContextPayload): string {
 }
 
 function renderCompactMarkdown(payload: AiContextPayload): string {
-    const calleeIds = payload.callees.map(item => item.resolvedTo ? `${item.id} -> ${item.resolvedTo}` : item.id);
     const dependencyIds = payload.dependencies.map(item => `${item.direction}: ${item.id}`);
     const architectureIds = payload.architecture.map(item => {
         const fpMarker = item.isLikelyFalsePositive ? " [likely false positive]" : "";
@@ -462,7 +497,7 @@ function renderCompactMarkdown(payload: AiContextPayload): string {
         "",
         ...renderCalledBySection(payload),
         "## Calls",
-        calleeIds.length === 0 ? "- None" : toBulletList(calleeIds),
+        ...renderCalleeLines(payload.callees, payload.calleesTruncated, limit),
         "",
         ...renderNavigationSections(payload, true),
         "## Dependencies",
@@ -497,23 +532,37 @@ try {
     const analysisNodeId = controllerMethodId ?? target.id;
 
     const callers = target.type === "class"
-        ? dedupeCalls(
+        ? dedupeIncomingCalls(
             findMethodsByParent(db, target.id)
                 .flatMap(methodId => findIncomingCalls(db, methodId, { includeInterfaceResolved, limit })),
             limit,
         )
         : findIncomingCalls(db, analysisNodeId, { includeInterfaceResolved, limit });
 
-    const rawCallees = target.type === "class"
-        ? dedupeCalls(
-            findMethodsByParent(db, target.id)
-                .flatMap(methodId => findOutgoingCalls(db, methodId, { includeInterfaceResolved, limit })),
+    let rawCallees: CallChainRow[];
+    let calleesTruncated = false;
+
+    if (target.type === "class") {
+        const chains = findMethodsByParent(db, target.id)
+            .map(methodId => findOutgoingCallChain(db, methodId, {
+                depth,
+                limit,
+                includeInterfaceResolved,
+            }));
+        rawCallees = dedupeCallChain(
+            chains.flatMap(chain => chain.calls),
             limit,
-        )
-        : findOutgoingCalls(db, analysisNodeId, { includeInterfaceResolved, limit });
-    const callees = filterFrameworkNoise(
-        preferConcreteCallTargets(rawCallees).slice(0, limit),
-    );
+        );
+        calleesTruncated = chains.some(chain => chain.truncated) || rawCallees.length >= limit;
+    } else {
+        const chain = findOutgoingCallChain(db, analysisNodeId, {
+            depth,
+            limit,
+            includeInterfaceResolved,
+        });
+        rawCallees = chain.calls;
+        calleesTruncated = chain.truncated;
+    }
     const relationTargetId = getRelationTargetId(target);
     const inheritance = relationTargetId ? findInheritanceChain(db, relationTargetId) : [];
     const dependencies: DependencyItem[] = includeDependsOn && relationTargetId
@@ -585,11 +634,11 @@ try {
     const navigation = gatherNavigationContext(db, target, {
         limit,
         callersCount: callers.length,
-        callees: callees.map(item => item.id),
+        callees: rawCallees.map(item => item.id),
         includeInterfaceResolved,
     });
 
-    const calleeItems = callees.map(item => {
+    const calleeItems: CallItem[] = rawCallees.map(item => {
         const isMissingTarget = !item.file;
         const resolvedTo = isMissingTarget
             ? resolveMethodThroughInheritance(db, item.id)
@@ -598,6 +647,7 @@ try {
                 : null;
         return {
             id: item.id,
+            depth: item.depth,
             callType: item.callType,
             via: item.via,
             file: item.file,
@@ -629,7 +679,13 @@ try {
         purposeGuess: guessPurpose(
             target.id,
             target.type,
-            callers.map(item => ({ id: item.id, callType: item.callType, via: item.via, file: item.file })),
+            callers.map(item => ({
+                id: item.id,
+                depth: 1,
+                callType: item.callType,
+                via: item.via,
+                file: item.file,
+            })),
             calleeItems,
             navigation.routeEntries,
             navigation.bladeEntries,
@@ -651,12 +707,14 @@ try {
         ),
         callers: callers.map(item => ({
             id: item.id,
+            depth: 1,
             callType: item.callType,
             via: item.via,
             file: item.file,
         })),
         graphEntries: navigation.graphEntries,
         callees: calleeItems,
+        calleesTruncated,
         dependencies,
         inheritance,
         architecture: filteredArchitecture,

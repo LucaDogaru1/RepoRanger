@@ -34,6 +34,8 @@
     "test:search-query-variants": "tsx test/graph/queries/searchQueryVariants.test.ts",
     "test:route-search-variants": "tsx test/graph/queries/routeSearchVariants.test.ts",
     "test:route-search": "tsx test/graph/queries/routeSearch.integration.test.ts",
+    "test:route-file-extractor": "tsx test/scanner/php/routes/routeFileExtractor.test.ts",
+    "test:call-chain": "tsx test/graph/queries/callChainQueries.test.ts",
     "test:navigation": "tsx test/analyzers/navigation/navigation.test.ts",
     "test:nuxt-strip-typescript": "tsx test/scanner/js/nuxt/stripTypescript.test.ts",
     "test:ts-parser": "tsx test/scanner/js/ts/tsParser.test.ts",

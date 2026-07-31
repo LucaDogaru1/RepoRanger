@@ -1,7 +1,12 @@
 import Parser from "tree-sitter";
 import { resolveClassName } from "../resolvers/resolveClassName";
 import { WalkContext } from "../walk/context";
-import { lookupMethodReturnType } from "../resolvers/lookupMethodOnType";
+import {
+    isSameOrAncestorClass,
+    lookupMethodReturnType,
+    lookupMethodTarget,
+    resolveStaticClassName,
+} from "../resolvers/lookupMethodOnType";
 import { lookupClassPropertyType } from "../walk/classPropertyTypesRegistry";
 import { resolveExpressionElementType } from "./phpDocPropertyTypes";
 import { resolveNewExpressionClassName } from "../astHandlers/node_types/objectCreationExpression";
@@ -53,6 +58,48 @@ function resolveObjectCreationType(
     return resolveNewExpressionClassName(node, context);
 }
 
+function resolveScopedCallExpressionType(
+    node: Parser.SyntaxNode,
+    context: WalkContext
+): string | undefined {
+    const targetMethodName = node.childForFieldName("name")?.text
+        ?? node.children.find(child => child.type === "name")?.text;
+    const relativeScope = node.children.find(child => child.type === "relative_scope")?.text;
+    const classNameNode = node.children.find(
+        child => child.type === "name" && child.text !== targetMethodName
+    );
+
+    if (!targetMethodName) {
+        return undefined;
+    }
+
+    let resolvedClass: string | undefined;
+
+    if (relativeScope === "self" || relativeScope === "static") {
+        resolvedClass = context.currentClass;
+    } else if (relativeScope === "parent") {
+        resolvedClass = context.currentClass
+            ? resolveStaticClassName("parent", context)
+            : undefined;
+    } else if (classNameNode) {
+        resolvedClass = resolveClassName(classNameNode.text, context);
+    } else {
+        return undefined;
+    }
+
+    if (!resolvedClass) {
+        return undefined;
+    }
+
+    const targetMethod = lookupMethodTarget(resolvedClass, targetMethodName);
+
+    if (!targetMethod) {
+        return undefined;
+    }
+
+    return resolvedClass;
+}
+
 function resolveMemberCallReturnType(
     node: Parser.SyntaxNode,
     context: WalkContext
@@ -70,7 +117,13 @@ function resolveMemberCallReturnType(
         return undefined;
     }
 
-    return lookupMethodReturnType(objectType, calledName);
+    const returnType = lookupMethodReturnType(objectType, calledName);
+
+    if (!returnType || isSameOrAncestorClass(returnType, objectType)) {
+        return objectType;
+    }
+
+    return returnType;
 }
 
 export function resolveExpressionType(
@@ -114,6 +167,10 @@ export function resolveExpressionType(
         }
 
         return resolveMemberAccessType(node, context);
+    }
+
+    if (node.type === "scoped_call_expression") {
+        return resolveScopedCallExpressionType(node, context);
     }
 
     if (node.type === "binary_expression") {
