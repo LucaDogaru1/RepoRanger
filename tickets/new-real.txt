@@ -1,0 +1,186 @@
+Hero Teaser → Hero — Position Summary
+Overview
+Field
+Value
+Preset ID
+2
+Display name
+Homepage hero
+Usable as
+Hero Teaser
+Layout
+Hero
+Description
+Full-width hero teaser for the main homepage placement.
+Preview key
+heroTeaser:hero
+The Hero layout defines 5 configurable positions, rendered top-to-bottom in the left content column of the hero preview (desktop and mobile).
+Positions (top to bottom)
+1. Headline
+Purpose: Short text shown in a primary colour.
+Setting
+Type
+Default
+Enabled
+Toggle
+on
+Source
+Not configurable
+—
+Display rules:
+collection → value of Heading is displayed
+event, livestream, VOD, vertical-promotion → nothing is displayed
+Display logic is hardcoded in the frontend. No further CMS setup beyond the enable toggle.
+2. Title
+Purpose: Primary hero title, shown prominently in the layout.
+Setting
+Default
+Enabled
+on
+Source
+title
+Source options: Title, Description, Cat 1, Cat 2, Cat 3.
+3. Body
+Purpose: Supporting text below the title. Intended for multiple lines.
+Setting
+Default
+Enabled
+on
+Source
+description
+Source options: same as Title.
+4. Tags
+Purpose: Tag chips shown below the body.
+Setting
+Default
+Enabled
+on
+Sources
+empty (ordered multi-select)
+Ignored sources
+empty
+Maximum tags visible
+2
+Tag fill up
+off
+Tag source options: Cat 1, Cat 2, Cat 3, Sports, Gender, Schools.
+5. Call to Action
+Purpose: Primary action button in the hero area.
+Setting
+Default
+Enabled
+on
+Source
+Not configurable
+Display rules:
+collection → primary and secondary collection links render as buttons
+event, livestream, VOD, vertical-promotion → nothing is displayed
+Default configuration
+
+
+{
+  "headline": { "enabled": true },
+  "title": { "enabled": true, "source": "title" },
+  "body": { "enabled": true, "source": "description" },
+  "tags": {
+    "enabled": true,
+    "sources": [],
+    "ignoredSources": [],
+    "maxVisibleTags": 2,
+    "tagFillUp": false
+  },
+  "callToAction": { "enabled": true }
+}
+Hero Teaser → Hero — Position Summary
+Overview
+Field
+Value
+Preset ID
+2
+Display name
+Homepage hero
+Usable as
+Hero Teaser
+Layout
+Hero
+Description
+Full-width hero teaser for the main homepage placement.
+Preview key
+heroTeaser:hero
+The Hero layout defines 5 configurable positions, rendered top-to-bottom in the left content column of the hero preview (desktop and mobile).
+Positions (top to bottom)
+1. Headline
+Purpose: Short text shown in a primary colour.
+Setting
+Type
+Default
+Enabled
+Toggle
+on
+Source
+Not configurable
+—
+Display rules:
+collection → value of Heading is displayed
+event, livestream, VOD, vertical-promotion → nothing is displayed
+Display logic is hardcoded in the frontend. No further CMS setup beyond the enable toggle.
+2. Title
+Purpose: Primary hero title, shown prominently in the layout.
+Setting
+Default
+Enabled
+on
+Source
+title
+Source options: Title, Description, Cat 1, Cat 2, Cat 3.
+3. Body
+Purpose: Supporting text below the title. Intended for multiple lines.
+Setting
+Default
+Enabled
+on
+Source
+description
+Source options: same as Title.
+4. Tags
+Purpose: Tag chips shown below the body.
+Setting
+Default
+Enabled
+on
+Sources
+empty (ordered multi-select)
+Ignored sources
+empty
+Maximum tags visible
+2
+Tag fill up
+off
+Tag source options: Cat 1, Cat 2, Cat 3, Sports, Gender, Schools.
+5. Call to Action
+Purpose: Primary action button in the hero area.
+Setting
+Default
+Enabled
+on
+Source
+Not configurable
+Display rules:
+collection → primary and secondary collection links render as buttons
+event, livestream, VOD, vertical-promotion → nothing is displayed
+Default configuration
+
+
+{
+  "headline": { "enabled": true },
+  "title": { "enabled": true, "source": "title" },
+  "body": { "enabled": true, "source": "description" },
+  "tags": {
+    "enabled": true,
+    "sources": [],
+    "ignoredSources": [],
+    "maxVisibleTags": 2,
+    "tagFillUp": false
+  },
+  "callToAction": { "enabled": true }
+}

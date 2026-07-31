@@ -1,0 +1,9 @@
+Title:
+Ranking not updating
+
+Description:
+Several users reported rankings look outdated.
+
+This happened after the latest release.
+
+Could be related to imports.

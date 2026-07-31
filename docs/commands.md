@@ -368,42 +368,6 @@ JSON output example:
 
 ---
 
-## Ticket Analysis
-
-Purpose: map ticket text to ranked components and produce an AI briefing.
-
-```bash
-npm run analyze:ticket -- <db.sqlite> [options]
-```
-
-Examples:
-
-```bash
-npm run analyze:ticket -- sqlite/Graph.sqlite --ticket=tickets/example.txt --scopes=php,js
-npm run analyze:ticket -- sqlite/Graph.sqlite --ticket=tickets/example.txt --scopes=php,js --full
-npm run analyze:ticket -- sqlite/Graph.sqlite --ticket=tickets/example.txt --scopes=php,js --answers=ticket_topic:queue
-npm run analyze:ticket -- sqlite/Graph.sqlite --ticket=tickets/example.txt --legacy --limit=10
-```
-
-Default output is the AI briefing (token-efficient). Session flags:
-
-| Option | Description |
-|---|---|
-| `--ticket=path` | Path to ticket text file |
-| `--scopes=php,js` | Graph surfaces to include (auto-detects js when graph has Vue/JS nodes) |
-| `--answers=q:id,...` | Pre-fill session answers (works with either mode) |
-| `--boost=term,...` | Agent hint: boost nodes matching symbol/path terms from the ticket |
-| `--suppress=term,...` | Agent hint: demote or drop noisy matches |
-| `--non-interactive` | Infer intent and skip prompts (alias: `--auto`) |
-| `--full` | Briefing + detailed analysis (raw matches, evidence) |
-| `--legacy` | Skip session; direct analyzer output |
-| `--limit=N` | Max ranked matches (legacy / debug) |
-| `--json` | Machine-readable output |
-
-Details: [Ticket analysis](ticket-analysis.md) · [Scan config](scan-config.md) (for JS HTTP linking).
-
----
-
 ## Find
 
 Purpose: search the graph for symbols, routes, and request fields by fuzzy text.

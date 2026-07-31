@@ -202,8 +202,7 @@ Copy from the same place your bundler/TS resolver uses:
 1. Create `impactlens.config.json` at the scan root.
 2. Map every alias prefix your frontend imports use (`from '@core/...'`, `from '@/...'`).
 3. Run scan — confirm `scan config: path aliases loaded`.
-4. For ticket briefings on full-stack work, use `--lang=both` and `--scopes=php,js`.
-5. If flow paths show `[partial]` with no `HTTP_REQUEST` edge, re-check aliases first.
+4. If cross-language traces have no `HTTP_REQUEST` edge, re-check aliases first.
 
 ---
 
@@ -212,5 +211,5 @@ Copy from the same place your bundler/TS resolver uses:
 | Doc | Contents |
 |-----|----------|
 | [scan-config.md](scan-config.md) | Full scan config reference, HTTP resource pattern, before/after chains |
-| [config.md](config.md) | Architecture rules, ticket tuning, all config types |
+| [config.md](config.md) | Architecture rules and all config types |
 | [support.md](support.md) | Language maturity, Nuxt gaps, what the graph can miss |

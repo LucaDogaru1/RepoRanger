@@ -1,0 +1,11 @@
+Title:
+Images blurry on mobile
+
+Description:
+Users reported that some images look blurry.
+
+Mostly visible on mobile devices.
+
+Original uploads look fine.
+
+Please investigate.

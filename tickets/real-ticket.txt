@@ -1,0 +1,17 @@
+Summary:
+As a OTT CMS platform
+I want to set for contents of type RECORDING that were deleted after 30 days to DELIVERED status based on SQS queue filepath
+so that they are not availalble for playback
+Details:
+To do
+CMS: Matches older than 30 days should no longer be accessible for full playback.
+Based on the s3 job that is executed to move the files to RED bucket form our bucket, once this is completed, we will get a notification from the SQS queue ( ARN: arn:aws:sqs:eu-central-1:643277666445:spottvod-expired-objects-prod ) on the file path of the content that was deleted.
+Using this filepath, we will check in our db and query the contentIDs of type RECORDING.
+All contentIDs of type RECORDING from this query dataset shall be then set to DELIVERED status
+Highlights: All highlight clips must remain on the platform indefinitely.
+all content type as highlights in CMS shall remain for playback
+API: We need to keep all historical event data intact (including via the API).
+A new flag in content api called  isArchived : true shall be added
+if the isArchive is true then that indicates the contentIds  were deleted in s3 and set to DELIVERED status
+Requirement meeting notes:
+to also display in CMS → all contents that are archived

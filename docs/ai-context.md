@@ -34,12 +34,11 @@ impactlens ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentContro
 - **`trace`** — end-to-end flow + coverage (shorter than ai-context)
 - **`ai-context`** — full navigation + blast-radius summary for AI paste
 - **`change-impact` / `impact`** — deeper dependency / impact detail
-- **`ticket`** — optional, only when the ticket has enough technical anchors
 
 Typical flow:
 
 ```text
-Read ticket → repo search OR find → trace → ai-context → change-impact / impact if needed
+Read task → repo search OR find → trace → ai-context → change-impact / impact if needed
 ```
 
 See also: [trace.md](trace.md)

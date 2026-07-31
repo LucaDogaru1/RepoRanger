@@ -4,7 +4,6 @@ name: impactlens
 description: >-
 Navigate large codebases using a static code graph. Find symbols, trace
 runtime and data flows, inspect relationships, and assess change impact.
-Use ticket analysis only when tickets contain concrete technical anchors.
 -------------------------------------------------------------------------
 
 # ImpactLens
@@ -128,7 +127,6 @@ For mixed tickets, investigate each independent feature separately.
 | Callers, callees, dependencies, interfaces, or inheritance are unclear | `ai-context --compact`       |
 | Blast radius is unclear                                                | `change-impact` or `impact`  |
 | Ticket is vague with no verified anchor                                | Targeted repository search   |
-| Several concrete anchors need ranking                                  | Optional `analyze:ticket`    |
 
 Use the cheapest method that can reliably answer the current question.
 
@@ -180,20 +178,6 @@ npx impactlens change-impact <graph-db> "<graph-id>"
 ```
 
 Use `change-impact` or `impact` only when the affected surface is not already evident from inspected code.
-
-## Analyze a ticket
-
-`analyze:ticket` is optional.
-
-Use it only when:
-
-* the ticket contains concrete technical anchors
-* several possible entrypoints exist
-* ranked suggestions would materially help
-
-Treat returned entrypoints as hypotheses and verify them in code.
-
----
 
 # Stop rule
 
@@ -354,7 +338,6 @@ trace
 ai-context
 change-impact
 impact
-analyze:ticket
 architecture
 risk
 hotspots

@@ -11,14 +11,6 @@ const COMMANDS: Record<string, CommandDef> = {
         script: "scan.ts",
         description: "Build Graph.sqlite / Graph.json from a codebase",
     },
-    ticket: {
-        script: "commands/ticket.ts",
-        description: "Ticket text → markdown briefing (alias: analyze:ticket)",
-    },
-    "analyze:ticket": {
-        script: "commands/ticket.ts",
-        description: "Same as ticket",
-    },
     find: {
         script: "commands/find.ts",
         description: "Search graph symbols, routes, and fields (alias: analyze:find)",
@@ -127,15 +119,13 @@ Commands:`);
 }
 
 function printHelp(): void {
-    console.log(`ImpactLens — static code graph + ticket briefings
+    console.log(`ImpactLens — static code graph navigation
 
 `);
     printCommands();
     console.log(`
 Examples:
   impactlens scan /path/to/repo --lang=both --output=both
-  impactlens ticket sqlite/Graph.sqlite --ticket="Hero teaser layout…" --scopes=php,js \\
-    --answers=ticket_topic:ui,change_includes:cms_ui --non-interactive
   impactlens find sqlite/Graph.sqlite PaymentController
   impactlens trace sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar"
   impactlens ai-context sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar" --compact

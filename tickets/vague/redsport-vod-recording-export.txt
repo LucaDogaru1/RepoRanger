@@ -1,0 +1,14 @@
+Title:
+Export VOD & Recording content from REDsport CMS Content List
+
+Description:
+Please export a list of all VOD & Recording content of REDsport that's listed on CMS - Content List. We need:
+
+- event ID
+- content ID
+- start date time
+- Title
+- file name and content path
+- if possible all event metadata (season, round, stage, gruppe, venue)
+
+RED has the export from the Data sync and they would like to link the migrated content (Content ID) with metadata.

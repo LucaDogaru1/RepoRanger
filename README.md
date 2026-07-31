@@ -71,16 +71,6 @@ impactlens change-impact sqlite/Graph.sqlite "<symbol>"
 impactlens impact sqlite/Graph.sqlite "<symbol>"
 ```
 
-Optionally generate a ticket briefing:
-
-```bash
-impactlens ticket sqlite/Graph.sqlite \
-  --ticket=tickets/issue.txt \
-  --scopes=php,js
-```
-
-Use ticket analysis only when the ticket already contains enough technical information (API names, endpoints, field names, symbols, routes, etc.). Otherwise, locate the first code symbol yourself or let your AI agent do it, then continue with the graph commands.
-
 **Most users will simply install the generated SKILL.md and let their AI agent use ImpactLens whenever it is beneficial**.
 
 ---
@@ -95,7 +85,6 @@ Use ticket analysis only when the ticket already contains enough technical infor
 | `ai-context`    | Show callers, callees and surrounding context |
 | `change-impact` | Analyze blast radius                          |
 | `impact`        | Extended dependency analysis                  |
-| `ticket`        | Optional ticket → graph briefing              |
 | `architecture`  | Layer validation                              |
 | `cycles`        | Detect dependency cycles                      |
 

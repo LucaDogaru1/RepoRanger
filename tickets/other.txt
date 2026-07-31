@@ -1,0 +1,38 @@
+Summary:
+As an OTT CMS platform
+
+I want to automatically archive expired recordings when an SQS event is received
+
+so that users can no longer access recordings whose retention period has ended.
+
+Details:
+
+A new SQS message is sent whenever a recording expires in the storage bucket.
+
+The message contains:
+
+* filepath
+* contentId
+* expirationDate
+
+Requirements:
+
+1. Consume the SQS message.
+2. Find the corresponding content by filepath.
+3. Only process contents of type RECORDING.
+4. Set status to DELIVERED.
+5. Set isArchived = true.
+6. Stop active encodings for the recording.
+7. The content must no longer be available through playback APIs.
+8. Log all processed content IDs.
+9. Ignore unknown filepaths.
+10. Add automated tests.
+
+Acceptance Criteria:
+
+* A valid SQS message archives the recording.
+* DELIVERED status is persisted.
+* isArchived is persisted.
+* Playback URLs are no longer returned.
+* Non-RECORDING contents remain unchanged.
+* Invalid filepaths are logged and skipped.

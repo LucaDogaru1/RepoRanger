@@ -1,6 +1,6 @@
 # Configuration
 
-ImpactLens uses **three kinds of config**, in **two locations**. No hunting — this page explains each file, why it exists, and how to run it.
+ImpactLens uses **two kinds of config**, in **two locations**. No hunting — this page explains each file, why it exists, and how to run it.
 
 ## At a glance
 
@@ -8,7 +8,6 @@ ImpactLens uses **three kinds of config**, in **two locations**. No hunting — 
 |--------|----------|-----------|---------|
 | **Scan config** | `<scan-root>/impactlens.config.json` | `npm run scan` | JS path aliases, HTTP resource class pattern |
 | **Architecture rules** | `config/architecture_scan/*.json` | `analyze:architecture --architecture-config=...` | Ignore/allow layer violations |
-| **Ticket tuning** | `config/ticket.json` | *(reference only today)* | Stop words, domain keyword weights for ranking |
 
 ```
 Your monorepo/                          ImpactLens repo/
@@ -16,7 +15,6 @@ Your monorepo/                          ImpactLens repo/
 └── (code)                               ├── architecture_scan/
                                          │   ├── spott.json
                                          │   └── laravel.example.json
-                                         └── ticket.json
 ```
 
 ---
@@ -68,7 +66,7 @@ Scan auto-loads `impactlens.config.json` from `/path/to/your-repo`.
 | File | Purpose |
 |------|---------|
 | `laravel.example.json` | Minimal starter for any Laravel project |
-| `spott.json` | SpOTT-specific ignores + ticket tuning block (see below) |
+| `spott.json` | SpOTT-specific architecture ignores |
 
 ### Structure
 
@@ -123,77 +121,11 @@ Use `laravel.example.json` as a template for new projects; copy and trim to your
 
 ---
 
-## 3. Ticket tuning — `config/ticket.json`
+## 3. Architecture preset — `config/architecture_scan/spott.json`
 
-**Why:** Ticket text uses domain words (`sqs`, `filepath`, `vod`, `recording`). Generic tokens (`feature`, `acceptance`) add noise. Weights boost real business terms so ranking prefers the right jobs/controllers/endpoints.
+**Why:** Keep SpOTT-specific architecture ignores in one reusable file.
 
-**Where:** `config/ticket.json` in this repo — **reference schema** for how ticket tuning is structured.
-
-**Status:** Not auto-loaded by `analyze:ticket` yet. Values document intended tuning; copy relevant sections into a project config when `--config` support lands, or use the `ticket` block inside `spott.json` as the SpOTT preset.
-
-### Structure
-
-```json
-{
-  "ticket": {
-    "stopWords": ["laravel", "feature", "acceptance"],
-    "domainKeywordWeights": {
-      "sqs": 13,
-      "filepath": 12,
-      "recording": 14,
-      "30_days": 16
-    },
-    "methodNameWeights": {
-      "handle": 6,
-      "deliver": 7,
-      "get": -1,
-      "find": -1
-    },
-    "businessTermSeeds": ["recording", "sqs", "vod"],
-    "shortTokenWhitelist": ["sqs", "vod", "cms", "api"],
-    "entrypointHints": ["job", "listener", "controller", "handle"],
-    "confidenceThresholds": { "medium": 90, "high": 160 }
-  }
-}
-```
-
-| Key | Why |
-|-----|-----|
-| `stopWords` | Ignored when tokenizing ticket text |
-| `domainKeywordWeights` | Higher = stronger match for queue/content domain tickets |
-| `methodNameWeights` | Boost `deliver`/`update`; penalize generic `get`/`find` |
-| `businessTermSeeds` | Seed terms learned from graph + ticket |
-| `shortTokenWhitelist` | Allow short tokens (3 chars) that are meaningful (`sqs`, `vod`) |
-| `entrypointHints` | Names that suggest entrypoints (job, listener, handle) |
-| `confidenceThresholds` | Score cutoffs for medium/high confidence labels |
-
-### Example effect
-
-Ticket: *“SQS message updates recording status by filepath”*
-
-Without weights: generic matches on `status`, `update`.  
-With weights: `sqs`, `filepath`, `recording` score higher → queue listener / content service rank above random controllers.
-
-### Intended usage (future)
-
-```bash
-npm run analyze:ticket -- sqlite/Graph.sqlite \
-  --ticket=tickets/my-ticket.txt \
-  --config=config/ticket.json
-```
-
-Until wired, ranking uses built-in heuristics in code (`ticketWorkflow.ts`, `ticketAnalyzerV3.ts`).
-
----
-
-## 4. Combined preset — `config/architecture_scan/spott.json`
-
-**Why:** One file for SpOTT: architecture ignores **and** ticket tuning in one place.
-
-Contains:
-
-- Full `architecture.ignorePatterns` for SpOTT namespaces (`SpOTTBackend`, `Modules`, HTTP facades, repository interfaces)
-- `ticket` block with SpOTT domain weights (`recording`, `delivered`, `30_days`, etc.)
+It contains full `architecture.ignorePatterns` for SpOTT namespaces (`SpOTTBackend`, `Modules`, HTTP facades, repository interfaces).
 
 Use architecture part today:
 
@@ -203,8 +135,6 @@ npm run analyze:architecture -- sqlite/Graph.sqlite \
   --ignore-likely-false-positives
 ```
 
-The `ticket` section in the same file is the SpOTT-specific ranking preset (reference until `--config` is connected).
-
 ---
 
 ## Which config do I need?
@@ -213,7 +143,6 @@ The `ticket` section in the same file is the SpOTT-specific ranking preset (refe
 |------|--------|--------|
 | First-time setup on a monorepo | Scan config | Add `impactlens.config.json` at scan root — [config-setup.md](config-setup.md) |
 | CI architecture gate | Architecture JSON | `--architecture-config=config/architecture_scan/your.json` |
-| Ticket ranking for your domain | Ticket JSON | Copy/adapt `config/ticket.json`; wait for `--config` or tune in code |
 | SpOTT codebase | `spott.json` | Architecture rules ready to use |
 
 **Quick path:** [quickstart.md](quickstart.md)

@@ -1,6 +1,6 @@
 # Language support
 
-ImpactLens is built around **one graph model** and **one scanner per language**. Ticket analysis and the CLI analyzers work on whatever lands in `Graph.sqlite` — but scan quality depends heavily on how mature each language pipeline is.
+ImpactLens is built around **one graph model** and **one scanner per language**. The CLI analyzers work on whatever lands in `Graph.sqlite` — but scan quality depends heavily on how mature each language pipeline is.
 
 ## Supported today
 
@@ -29,7 +29,7 @@ See [config-setup.md](config-setup.md) for copy-paste examples, or [scan-config.
 - Laravel-style routes and controller entrypoints
 - Call, extends, implements, and dependency edges
 - Jobs, listeners, commands as workflow entrypoints
-- Field / validation / config references (for ticket matching)
+- Field / validation / config references (for graph search and flow tracing)
 
 Tuned for **Laravel**-shaped backends. Other PHP frameworks may scan, but route and role detection are Laravel-oriented.
 
@@ -70,7 +70,7 @@ If you want to contribute a new language, start with: file discovery → AST wal
 
 The **PHP scanner was written and refined manually** over a long period — it reflects real debugging on production codebases and is the reference implementation for how deep a language pipeline should go.
 
-The **JavaScript / Vue / Nuxt scanner under `src/scanner/js/` is mostly AI-generated**. It exists so full-stack tickets (UI → API → backend) are possible without waiting for a second multi-month manual pass. It is useful today, but expect rough edges, uneven coverage, and more false gaps in briefings than on the PHP side.
+The **JavaScript / Vue / Nuxt scanner under `src/scanner/js/` is mostly AI-generated**. It exists so full-stack traces (UI → API → backend) are possible without waiting for a second multi-month manual pass. It is useful today, but expect rough edges, uneven coverage, and more false coverage gaps than on the PHP side.
 
 Adding languages one at a time, alone, does not scale. The JS folder is a deliberate trade-off: **ship cross-language value sooner**, then harden or replace pieces as real projects expose gaps.
 

@@ -92,4 +92,3 @@ Cross-language linking merges JS `api_endpoint` nodes with PHP routes when paths
 | Dead code | Methods without incoming usage |
 | Architecture | Layer direction on dependencies |
 | Hotspots / risk | Connection density |
-| Ticket analysis | Keyword match + workflow boost + flow paths |

@@ -20,7 +20,7 @@ cd ImpectLens
 npm install
 ```
 
-Use `impactlens …` after npm install in a project, or `npm run scan` / `npm run analyze:ticket` when working from a clone.
+Use `impactlens …` after npm install in a project, or the corresponding npm scripts when working from a clone.
 
 List all CLI commands: `npx impactlens --commands`
 
@@ -73,26 +73,7 @@ impactlens ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentContro
 Use **`trace`** for a quick flow story (route → controller → fields → services + coverage gaps).  
 Use **`ai-context --compact`** when you need the full navigation paste for an AI tool.
 
-## 5. Optional ticket briefing
-
-Only when the ticket has technical anchors (endpoints, field paths, symbols):
-
-```bash
-npm run analyze:ticket -- sqlite/Graph.sqlite \
-  --ticket=tickets/my-ticket.txt \
-  --scopes=php,js
-```
-
-Output is a compact markdown briefing (read-first, flow paths, files to open). Paste into your AI tool, then continue with `find` → `trace` → `ai-context`.
-
-| Flag | When |
-|------|------|
-| `--scopes=php,js` | Full-stack / CMS / Vue tickets |
-| `--scopes=php` | Backend-only (queue, API, jobs) |
-| `--full` | Debug ranking (raw matches — high token cost) |
-| `--answers=ticket_topic:ui,change_includes:mixed` | Skip interactive prompts |
-
-## 6. Blast radius (optional)
+## 5. Blast radius (optional)
 
 ```bash
 npm run analyze:change-impact -- sqlite/Graph.sqlite "App\\Services\\SomeService::method"
@@ -106,7 +87,7 @@ npm run analyze:impact -- sqlite/Graph.sqlite "App\\Services\\SomeService::metho
 After `npm install`, the skill is at `.cursor/SKILL.md` in your project (source: `assets/agent-skill/SKILL.md` in this repo).
 
 **Developer:** steps 1–3 once per repo.  
-**AI:** `find` → `trace` → `ai-context` per task; `ticket` only when anchors are clear.
+**AI:** `find` → `trace` → `ai-context` per task.
 
 ---
 
@@ -121,4 +102,3 @@ After `npm install`, the skill is at `.cursor/SKILL.md` in your project (source:
 | [commands.md](commands.md) | All CLI flags |
 | [trace.md](trace.md) | End-to-end flow + coverage for one symbol |
 | [ai-context.md](ai-context.md) | Full navigation report for AI paste |
-| [ticket-analysis.md](ticket-analysis.md) | Session, workflows, flow paths |

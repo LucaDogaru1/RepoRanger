@@ -1,0 +1,7 @@
+Title:
+Categories missing
+
+Description:
+Provider data contains categories but they do not show up in the application.
+
+Might be related to recent import changes.

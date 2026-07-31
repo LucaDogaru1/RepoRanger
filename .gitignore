@@ -26,10 +26,6 @@ config/architecture_scan/spott.json
 jsproject/
 project/
 
-tickets/*
-!tickets/README.md
-
-# Benchmark artifacts (local runs, summaries, failed runs)
 benchmarkFiles/
 benchmarkSummary/
 feedback/
