@@ -41,7 +41,15 @@ npx impactlens install-skill   # reinstall skill later
 impactlens scan /path/to/repo --lang=both --output=sqlite --sqlite-path=sqlite/Graph.sqlite --no-merge
 ```
 
-Use `impactlens.config.json` at the scan root when the project uses path aliases (`@/`, etc.). See [`docs/config-setup.md`](docs/config-setup.md).
+**Separate frontend and backend folders?** Pass multiple scan roots in one command — they merge into a single `Graph.sqlite`:
+
+```bash
+impactlens scan /path/to/backend /path/to/frontend --lang=both --output=sqlite --sqlite-path=sqlite/Graph.sqlite --no-merge
+```
+
+File paths in the graph are prefixed with each root folder name (e.g. `backend/app/...`, `frontend/src/...`).
+
+Use `impactlens.config.json` at each scan root when the project uses path aliases (`@/`, etc.). See [`docs/config-setup.md`](docs/config-setup.md).
 
 ### 2. Find a route or symbol
 
