@@ -1,10 +1,10 @@
 {
-  "name": "impactlens",
+  "name": "repo-ranger",
   "version": "1.1.9",
-  "description": "Static code graph scanner and navigation CLI for AI-assisted development. Currently supports PHP and Laravel, JavaScript, TypeScript, Vue, and Nuxt.",
-  "main": "bin/impactlens.js",
+  "description": "RepoRanger — static code graph scanner and navigation CLI for AI-assisted development. Supports PHP/Laravel, JavaScript/TypeScript, Vue, and Nuxt.",
+  "main": "bin/repo-ranger.js",
   "bin": {
-    "impactlens": "bin/impactlens.js"
+    "repo-ranger": "bin/repo-ranger.js"
   },
   "files": [
     "bin/",
@@ -12,7 +12,7 @@
     "assets/",
     "scripts/",
     "config/architecture_scan/laravel.example.json",
-    "impactlens.config.example.json",
+    "repo-ranger.config.example.json",
     "docs/",
     "README.md"
   ],
@@ -55,17 +55,19 @@
     "laravel",
     "impact-analysis",
     "cursor",
-    "cli"
+    "cli",
+    "repo-ranger",
+    "RepoRanger"
   ],
   "author": "Luca Dogaru",
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LucaDogaru1/ImpectLens.git"
+    "url": "git+https://github.com/LucaDogaru1/RepoRanger.git"
   },
-  "homepage": "https://github.com/LucaDogaru1/ImpectLens#readme",
+  "homepage": "https://github.com/LucaDogaru1/RepoRanger#readme",
   "bugs": {
-    "url": "https://github.com/LucaDogaru1/ImpectLens/issues"
+    "url": "https://github.com/LucaDogaru1/RepoRanger/issues"
   },
   "engines": {
     "node": ">=18"

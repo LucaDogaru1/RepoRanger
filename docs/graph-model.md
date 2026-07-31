@@ -1,6 +1,6 @@
 # Graph model
 
-ImpactLens stores a code graph in SQLite (`nodes`, `edges`) and JSON. All analyzers query this graph.
+RepoRanger stores a code graph in SQLite (`nodes`, `edges`) and JSON. All analyzers query this graph.
 
 ## Example (PHP)
 

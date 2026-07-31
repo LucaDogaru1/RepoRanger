@@ -21,7 +21,7 @@ const jsonOutput = hasFlag(args, "--json");
 const outputPath = getOptionValue(args, "--output");
 
 if (!dbPath || !query) {
-    console.log("Usage: impactlens trace <db.sqlite> \"<symbol>\" [--depth=2] [--limit=20] [--include-interface-resolved] [--json] [--output=file.txt]");
+    console.log("Usage: repo-ranger trace <db.sqlite> \"<symbol>\" [--depth=2] [--limit=20] [--include-interface-resolved] [--json] [--output=file.txt]");
     process.exit(2);
 }
 
@@ -209,7 +209,7 @@ function renderTrace(data: TraceResult): string {
     }
 
     lines.push("");
-    lines.push(`Hint: impactlens ai-context ${dbPath} "${data.analysisNodeId.replace(/\\/g, "\\\\")}" --compact`);
+    lines.push(`Hint: repo-ranger ai-context ${dbPath} "${data.analysisNodeId.replace(/\\/g, "\\\\")}" --compact`);
 
     return lines.join("\n");
 }
@@ -307,7 +307,7 @@ function printTrace(data: TraceResult): void {
         bulletLines(data.navigation.suggestedNext.slice(0, 8));
     }
 
-    console.log(chalk.gray(`\nHint: impactlens ai-context ${dbPath} "${data.analysisNodeId.replace(/\\/g, "\\\\")}" --compact`));
+    console.log(chalk.gray(`\nHint: repo-ranger ai-context ${dbPath} "${data.analysisNodeId.replace(/\\/g, "\\\\")}" --compact`));
 }
 
 try {

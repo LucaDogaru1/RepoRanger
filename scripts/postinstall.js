@@ -11,24 +11,24 @@ function installAgentSkill(io = {}) {
     const log = io.log || (() => {});
     const warn = io.warn || console.warn;
 
-    if (process.env.IMPACTLENS_SKIP_SKILL === '1') {
-        return { ok: true, skipped: true, reason: 'IMPACTLENS_SKIP_SKILL=1' };
+    if (process.env.REPO_RANGER_SKIP_SKILL === '1') {
+        return { ok: true, skipped: true, reason: 'REPO_RANGER_SKIP_SKILL=1' };
     }
 
     const skillSource = path.join(__dirname, '..', 'assets', 'agent-skill', 'SKILL.md');
     if (!fs.existsSync(skillSource)) {
-        warn('[impactlens] Agent skill template missing; skip .cursor/SKILL.md install.');
+        warn('[repo-ranger] Agent skill template missing; skip .cursor/skills/repo-ranger/SKILL.md install.');
         return { ok: false, skipped: true, reason: 'template missing' };
     }
 
     const projectRoot = resolveProjectRoot();
-    const skillDir = path.join(projectRoot, '.cursor');
+    const skillDir = path.join(projectRoot, '.cursor', 'skills', 'repo-ranger');
     const skillDest = path.join(skillDir, 'SKILL.md');
 
     fs.mkdirSync(skillDir, { recursive: true });
     fs.writeFileSync(skillDest, fs.readFileSync(skillSource, 'utf8'), 'utf8');
-    log(`[impactlens] Agent skill → ${path.relative(projectRoot, skillDest)}`);
-    log('[impactlens] Commands: npx impactlens --commands');
+    log(`[repo-ranger] Agent skill → ${path.relative(projectRoot, skillDest)}`);
+    log('[repo-ranger] Commands: npx repo-ranger --commands');
     return { ok: true, path: skillDest };
 }
 

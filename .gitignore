@@ -29,7 +29,7 @@ project/
 benchmarkFiles/
 benchmarkSummary/
 feedback/
-impactlensFeedback/
+repo-ranger-feedback/
 summary/
 failedImpact/
 spott/

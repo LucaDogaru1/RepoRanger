@@ -1,22 +1,22 @@
 ---
-name: impactlens
+name: repo-ranger
 description: >-
-  Navigate large codebases with the ImpactLens static code graph. Use when a
+  Navigate large codebases with the RepoRanger static code graph. Use when a
   ticket contains an HTTP route, controller, class, method, component, field,
   or when code flow, dependencies, callers, or change impact
   are unclear. Especially useful for large PHP/Laravel, JavaScript/TypeScript,
   Vue, and Nuxt repositories.
 ---
 
-# ImpactLens
+# RepoRanger
 
-ImpactLens is a navigation map, not a source of truth. Verify relevant graph
+RepoRanger is a navigation map, not a source of truth. Verify relevant graph
 results in repository code before editing.
 
 Run commands through:
 
 ```bash
-npx impactlens
+npx repo-ranger
 ```
 
 # Workflow
@@ -27,7 +27,7 @@ npx impactlens
 2. Resolve the graph database path once.
 3. Choose the command from the decision guide below.
 4. Inspect the top relevant result in repository code.
-5. Do not chain graph commands by default. Run another ImpactLens command only
+5. Do not chain graph commands by default. Run another RepoRanger command only
    when the previous result left a concrete unanswered navigation question.
 6. Stop graph navigation when the likely implementation or root-cause area is
    known. Once a relevant file has been opened and the next investigation step
@@ -43,7 +43,7 @@ find already identifies the relevant controller
 → do not automatically run trace, ai-context, and change-impact
 ```
 
-Do not force ImpactLens when an exact file is already known. Use ImpactLens
+Do not force RepoRanger when an exact file is already known. Use RepoRanger
 when a concrete route or symbol is known but its repository location or
 relationships are unclear.
 
@@ -52,11 +52,11 @@ relationships are unclear.
 Prefer, in order:
 
 1. an explicitly provided path
-2. a path documented by `impactlens.config.json` or repository instructions
+2. a path documented by `repo-ranger.config.json` or repository instructions
 3. an existing non-empty SQLite graph such as:
 
 ```text
-impactlens/graph.sqlite
+repo-ranger/graph.sqlite
 sqlite/Graph.sqlite
 graph.sqlite
 ```
@@ -82,7 +82,7 @@ If no usable graph exists, continue with normal repository search.
 | Route-to-controller, request, UI-to-API, or data flow | `trace` |
 | Callers, callees, implementations, dependencies, inheritance | `ai-context --compact` |
 | Blast radius | `change-impact` or `impact` |
-| Vague ticket without a verified code anchor | Use targeted repository search to discover the first concrete anchor, then switch to ImpactLens if graph context is still useful |
+| Vague ticket without a verified code anchor | Use targeted repository search to discover the first concrete anchor, then switch to RepoRanger if graph context is still useful |
 
 # Find
 
@@ -92,9 +92,9 @@ Always use `--kind=route` for HTTP paths and route fragments. Do not rely on
 auto detection for fragments such as `config/settings` or `related-contents`.
 
 ```bash
-npx impactlens find <graph-db> "GET /api/v3/config/settings" --kind=route
-npx impactlens find <graph-db> "GET /api/v3/contents/{contentId}/multiview" --kind=route
-npx impactlens find <graph-db> "related-contents" --kind=route
+npx repo-ranger find <graph-db> "GET /api/v3/config/settings" --kind=route
+npx repo-ranger find <graph-db> "GET /api/v3/contents/{contentId}/multiview" --kind=route
+npx repo-ranger find <graph-db> "related-contents" --kind=route
 ```
 
 Full ticket URLs are supported:
@@ -119,9 +119,9 @@ Do not repeatedly submit equivalent full-path variants.
 ## Symbols
 
 ```bash
-npx impactlens find <graph-db> MultiviewController
-npx impactlens find <graph-db> EditorialService
-npx impactlens find <graph-db> "App\\Services\\PaymentService::process"
+npx repo-ranger find <graph-db> MultiviewController
+npx repo-ranger find <graph-db> EditorialService
+npx repo-ranger find <graph-db> "App\\Services\\PaymentService::process"
 ```
 
 For a known class or method name, search the complete identifier first. Do not
@@ -137,7 +137,7 @@ Do not invent plausible class names from ticket prose.
 ## Fields
 
 ```bash
-npx impactlens find <graph-db> userCountry --kind=field
+npx repo-ranger find <graph-db> userCountry --kind=field
 ```
 
 Field search only finds fields present in the scanned graph. A field proposed
@@ -152,7 +152,7 @@ No field result is not evidence that the feature area does not exist.
 # Trace
 
 ```bash
-npx impactlens trace <graph-db> "<symbol-or-route>"
+npx repo-ranger trace <graph-db> "<symbol-or-route>"
 ```
 
 Use `trace` only for a concrete flow question:
@@ -171,8 +171,8 @@ Do not run `trace` merely because `find` succeeded.
 # Relationships and impact
 
 ```bash
-npx impactlens ai-context <graph-db> "<graph-id>" --compact
-npx impactlens change-impact <graph-db> "<graph-id>"
+npx repo-ranger ai-context <graph-db> "<graph-id>" --compact
+npx repo-ranger change-impact <graph-db> "<graph-id>"
 ```
 
 Use `ai-context` when callers, callees, implementations, dependencies, or
@@ -196,26 +196,26 @@ has already been verified in repository code.
 
 # Execution failures
 
-If ImpactLens fails with `EPERM` or cannot create an IPC pipe, retry once with
+If RepoRanger fails with `EPERM` or cannot create an IPC pipe, retry once with
 the required permissions or outside the sandbox. If it still fails, continue
 with repository search. Do not interpret the execution failure as an empty
 graph result.
 
 # Command integrity
 
-Preserve the real ImpactLens exit code.
+Preserve the real RepoRanger exit code.
 
 Avoid pipelines where commands such as `head` hide failures:
 
 ```bash
-npx impactlens find <graph-db> PaymentController 2>&1 | head -40
+npx repo-ranger find <graph-db> PaymentController 2>&1 | head -40
 ```
 
 When limiting output, enable pipe failure handling:
 
 ```bash
 set -o pipefail
-npx impactlens find <graph-db> PaymentController 2>&1 | head -40
+npx repo-ranger find <graph-db> PaymentController 2>&1 | head -40
 ```
 
 Alternatively, capture the complete output and shorten only its summary.
@@ -243,7 +243,7 @@ Never edit code solely because a graph result suggested it.
 
 # Final principles
 
-* ImpactLens is a navigation tool, not a source of truth.
+* RepoRanger is a navigation tool, not a source of truth.
 * Use concrete existing anchors whenever possible.
 * Use `find --kind=route` for HTTP routes and route fragments.
 * Do not chain graph commands without a concrete unanswered question.

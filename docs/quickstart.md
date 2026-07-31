@@ -4,29 +4,29 @@ Everything you need once. No hunting through other docs.
 
 ## 1. Install
 
-**In your project** (recommended — installs the `impactlens` CLI and Cursor agent skill):
+**In your project** (recommended — installs the `repo-ranger` CLI and Cursor agent skill):
 
 ```bash
-npm install impactlens
+npm install repo-ranger
 # skill auto-written to .cursor/SKILL.md
-impactlens --help
+repo-ranger --help
 ```
 
 **Or clone this repo** for development:
 
 ```bash
-git clone https://github.com/LucaDogaru1/ImpectLens.git
-cd ImpectLens
+git clone https://github.com/LucaDogaru1/RepoRanger.git
+cd RepoRanger
 npm install
 ```
 
-Use `impactlens …` after npm install in a project, or the corresponding npm scripts when working from a clone.
+Use `repo-ranger …` after npm install in a project, or the corresponding npm scripts when working from a clone.
 
-List all CLI commands: `npx impactlens --commands`
+List all CLI commands: `npx repo-ranger --commands`
 
 ## 2. Config (only if the target repo uses `@/` imports)
 
-Create **`impactlens.config.json` at the scan root** (the repo you scan, not inside ImpactLens).
+Create **`repo-ranger.config.json` at the scan root** (the repo you scan, not inside RepoRanger).
 
 **Copy-paste examples:** [config-setup.md](config-setup.md) — Laravel+Vue `@/`, Nuxt package aliases, Vite `src/`, subfolder scans.
 
@@ -58,16 +58,16 @@ Produces:
 - `Graph.json` — optional backup / inspect
 
 **JS/Vue only:** `--lang=js`  
-**Nuxt monorepo:** `--lang=js` at the Nuxt repo root — add `impactlens.config.json` with package aliases. See [config-setup.md](config-setup.md#2-nuxt-3-monorepo-package-scoped-aliases).
+**Nuxt monorepo:** `--lang=js` at the Nuxt repo root — add `repo-ranger.config.json` with package aliases. See [config-setup.md](config-setup.md#2-nuxt-3-monorepo-package-scoped-aliases).
 
 ## 4. Investigate a symbol (default workflow)
 
 Once you have a keyword from the ticket or repo search:
 
 ```bash
-impactlens find sqlite/Graph.sqlite PaymentController
-impactlens trace sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay"
-impactlens ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay" --compact
+repo-ranger find sqlite/Graph.sqlite PaymentController
+repo-ranger trace sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay"
+repo-ranger ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay" --compact
 ```
 
 Use **`trace`** for a quick flow story (route → controller → fields → services + coverage gaps).  
@@ -96,7 +96,7 @@ After `npm install`, the skill is at `.cursor/SKILL.md` in your project (source:
 | Doc | Why open it |
 |-----|-------------|
 | [support.md](support.md) | PHP vs JS/Vue/**Nuxt** maturity, gaps, what to expect from the graph |
-| [config-setup.md](config-setup.md) | **Path alias setup** — copy-paste `impactlens.config.json` examples |
+| [config-setup.md](config-setup.md) | **Path alias setup** — copy-paste `repo-ranger.config.json` examples |
 | [config.md](config.md) | All config files explained |
 | [scan-config.md](scan-config.md) | Alias examples, monorepo paths |
 | [commands.md](commands.md) | All CLI flags |

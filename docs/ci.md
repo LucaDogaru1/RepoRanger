@@ -1,6 +1,6 @@
 # CI Integration
 
-ImpactLens supports fail flags so pipelines can block merges when issues are found.
+RepoRanger supports fail flags so pipelines can block merges when issues are found.
 
 ## Fail flags
 

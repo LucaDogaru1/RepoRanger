@@ -18,14 +18,14 @@ Use it after `find` (and optionally `trace`) for callers, routes, field flow, im
 
 ```bash
 # 1. Find a graph id
-impactlens find sqlite/Graph.sqlite PaymentController
-impactlens find sqlite/Graph.sqlite "POST /payments" --kind=route
+repo-ranger find sqlite/Graph.sqlite PaymentController
+repo-ranger find sqlite/Graph.sqlite "POST /payments" --kind=route
 
 # 2. Optional: end-to-end flow (compact story)
-impactlens trace sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay"
+repo-ranger trace sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay"
 
 # 3. Full context for AI paste
-impactlens ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay" --compact
+repo-ranger ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay" --compact
 ```
 
 ## Positioning

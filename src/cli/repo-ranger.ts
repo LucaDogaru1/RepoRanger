@@ -92,16 +92,16 @@ const COMMANDS: Record<string, CommandDef> = {
     },
     "install-skill": {
         script: "",
-        description: "Write .cursor/SKILL.md in the current project",
+        description: "Write .cursor/skills/repo-ranger/SKILL.md in the current project",
     },
 };
 
 function printCommands(): void {
-    console.log(`ImpactLens commands
+    console.log(`RepoRanger commands
 
 Usage:
-  impactlens <command> [args...]
-  npx impactlens <command> [args...]
+  repo-ranger <command> [args...]
+  npx repo-ranger <command> [args...]
 
 Commands:`);
 
@@ -118,25 +118,25 @@ Commands:`);
 }
 
 function printHelp(): void {
-    console.log(`ImpactLens — static code graph navigation
+    console.log(`RepoRanger — static code graph navigation
 
 `);
     printCommands();
     console.log(`
 Examples:
-  impactlens scan /path/to/repo --lang=both --output=both
-  impactlens find sqlite/Graph.sqlite PaymentController
-  impactlens trace sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar"
-  impactlens ai-context sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar" --compact
+  repo-ranger scan /path/to/repo --lang=both --output=both
+  repo-ranger find sqlite/Graph.sqlite PaymentController
+  repo-ranger trace sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar"
+  repo-ranger ai-context sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar" --compact
 
-List commands only:  impactlens --commands
-Full help:           impactlens --help
+List commands only:  repo-ranger --commands
+Full help:           repo-ranger --help
 
 After npm install, the agent skill is written to:
-  .cursor/SKILL.md
+  .cursor/skills/repo-ranger/SKILL.md
 
-Skip auto-install: IMPACTLENS_SKIP_SKILL=1 npm install impactlens
-Docs: https://github.com/LucaDogaru1/ImpectLens
+Skip auto-install: REPO_RANGER_SKIP_SKILL=1 npm install repo-ranger
+Docs: https://github.com/LucaDogaru1/RepoRanger
 `);
 }
 
@@ -165,7 +165,7 @@ function isSandboxLaunchError(error: unknown): boolean {
 }
 
 function printSandboxLaunchHint(): void {
-    console.error(`ImpactLens failed to start the command.
+    console.error(`RepoRanger failed to start the command.
 
 Cause: EPERM while launching the command runtime.
 Restricted sandbox environments may block subprocess creation.
@@ -180,7 +180,7 @@ function runTsScript(relativeScript: string, args: string[]): number {
     process.exitCode = 0;
 
     try {
-        // bin/impactlens.js registers tsx/cjs; require() runs commands in-process.
+        // bin/repo-ranger.js registers tsx/cjs; require() runs commands in-process.
         // Dynamic import() does not use that loader for .ts files in this CJS package.
         require(scriptPath);
         return process.exitCode ?? 0;

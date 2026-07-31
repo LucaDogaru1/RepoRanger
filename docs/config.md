@@ -1,17 +1,17 @@
 # Configuration
 
-ImpactLens uses **two kinds of config**, in **two locations**. No hunting — this page explains each file, why it exists, and how to run it.
+RepoRanger uses **two kinds of config**, in **two locations**. No hunting — this page explains each file, why it exists, and how to run it.
 
 ## At a glance
 
 | Config | Location | Loaded by | Purpose |
 |--------|----------|-----------|---------|
-| **Scan config** | `<scan-root>/impactlens.config.json` | `npm run scan` | JS path aliases, HTTP resource class pattern |
+| **Scan config** | `<scan-root>/repo-ranger.config.json` | `npm run scan` | JS path aliases, HTTP resource class pattern |
 | **Architecture rules** | `config/architecture_scan/*.json` | `analyze:architecture --architecture-config=...` | Ignore/allow layer violations |
 
 ```
-Your monorepo/                          ImpactLens repo/
-├── impactlens.config.json   ← scan    ├── config/
+Your monorepo/                          RepoRanger repo/
+├── repo-ranger.config.json   ← scan    ├── config/
 └── (code)                               ├── architecture_scan/
                                          │   ├── spott.json
                                          │   └── laravel.example.json
@@ -19,13 +19,13 @@ Your monorepo/                          ImpactLens repo/
 
 ---
 
-## 1. Scan config — `impactlens.config.json`
+## 1. Scan config — `repo-ranger.config.json`
 
 **Why:** The scanner reads import strings literally. Bundler aliases like `@/` do not exist on disk unless you map them.
 
-**Where:** At the **scan root** (the repo you pass to `npm run scan`), not inside the ImpactLens tool folder.
+**Where:** At the **scan root** (the repo you pass to `npm run scan`), not inside the RepoRanger tool folder.
 
-**Also accepts:** `.impactlens.json` in the same place.
+**Also accepts:** `.repo-ranger.json` in the same place.
 
 ### Example (Vue/Laravel monorepo with `@/`)
 
@@ -49,7 +49,7 @@ Your monorepo/                          ImpactLens repo/
 npm run scan -- /path/to/your-repo --lang=both --no-merge --output=both
 ```
 
-Scan auto-loads `impactlens.config.json` from `/path/to/your-repo`.
+Scan auto-loads `repo-ranger.config.json` from `/path/to/your-repo`.
 
 **More detail:** [config-setup.md](config-setup.md) (copy-paste examples) · [scan-config.md](scan-config.md) (reference)
 
@@ -57,7 +57,7 @@ Scan auto-loads `impactlens.config.json` from `/path/to/your-repo`.
 
 ## 2. Architecture rules — `config/architecture_scan/`
 
-**Why:** Layer checks (Controller → Service → Repository) produce noise in Laravel apps: repositories call `Model::query()`, services use `Http::`, controllers type-hint `Request`. Config tells ImpactLens which edges are **acceptable** vs real violations.
+**Why:** Layer checks (Controller → Service → Repository) produce noise in Laravel apps: repositories call `Model::query()`, services use `Http::`, controllers type-hint `Request`. Config tells RepoRanger which edges are **acceptable** vs real violations.
 
 **Where:** Shipped examples live in this repo under `config/architecture_scan/`. Point `--architecture-config` at your copy or these files.
 
@@ -141,7 +141,7 @@ npm run analyze:architecture -- sqlite/Graph.sqlite \
 
 | Goal | Config | Action |
 |------|--------|--------|
-| First-time setup on a monorepo | Scan config | Add `impactlens.config.json` at scan root — [config-setup.md](config-setup.md) |
+| First-time setup on a monorepo | Scan config | Add `repo-ranger.config.json` at scan root — [config-setup.md](config-setup.md) |
 | CI architecture gate | Architecture JSON | `--architecture-config=config/architecture_scan/your.json` |
 | SpOTT codebase | `spott.json` | Architecture rules ready to use |
 

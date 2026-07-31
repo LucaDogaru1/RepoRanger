@@ -2,7 +2,7 @@
 
 ## Layer model
 
-ImpactLens maps classes to layers by namespace/path keywords:
+RepoRanger maps classes to layers by namespace/path keywords:
 
 | Rank | Layer keywords |
 |---|---|

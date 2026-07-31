@@ -1,16 +1,16 @@
 # Config setup
 
-ImpactLens needs **one file in your project** for accurate JS/Vue/Nuxt graphs: `impactlens.config.json` at the **scan root** (the folder you pass to `scan`, not inside the ImpactLens package).
+RepoRanger needs **one file in your project** for accurate JS/Vue/Nuxt graphs: `repo-ranger.config.json` at the **scan root** (the folder you pass to `scan`, not inside the RepoRanger package).
 
 ```text
 your-repo/
-├── impactlens.config.json   ← here
+├── repo-ranger.config.json   ← here
 ├── apps/
 ├── packages/
 └── ...
 ```
 
-Also accepted: `.impactlens.json` in the same folder.
+Also accepted: `.repo-ranger.json` in the same folder.
 
 **When you need this:** any project that uses import aliases (`@/`, `@core/`, `~`, etc.). Relative imports (`../../api`) work without config.
 
@@ -19,7 +19,7 @@ Also accepted: `.impactlens.json` in the same folder.
 After creating the file:
 
 ```bash
-npx impactlens scan /path/to/your-repo --lang=both --output=both
+npx repo-ranger scan /path/to/your-repo --lang=both --output=both
 ```
 
 The CLI prints `scan config: path aliases loaded` when the file is found.
@@ -51,7 +51,7 @@ Typical full-stack monorepo: PHP backend with Vue assets under `resources/assets
 **Scan from monorepo root:**
 
 ```bash
-npx impactlens scan /path/to/monorepo --lang=both --no-merge --output=both
+npx repo-ranger scan /path/to/monorepo --lang=both --no-merge --output=both
 ```
 
 ---
@@ -104,7 +104,7 @@ Real-world example (Nuxt `packages/` layout):
 **Scan:**
 
 ```bash
-npx impactlens scan /path/to/nuxt-monorepo --lang=js --output=both
+npx repo-ranger scan /path/to/nuxt-monorepo --lang=js --output=both
 ```
 
 For UI → API → controller briefings, also scan the Laravel backend (`--lang=php` or `--lang=both` if both live in one tree). See [support.md](support.md#nuxt-beta).
@@ -184,7 +184,7 @@ Copy from the same place your bundler/TS resolver uses:
 }
 ```
 
-**Becomes ImpactLens config** (drop the `/*` suffix on keys; values are directories relative to scan root):
+**Becomes RepoRanger config** (drop the `/*` suffix on keys; values are directories relative to scan root):
 
 ```json
 {
@@ -199,7 +199,7 @@ Copy from the same place your bundler/TS resolver uses:
 
 ## Checklist
 
-1. Create `impactlens.config.json` at the scan root.
+1. Create `repo-ranger.config.json` at the scan root.
 2. Map every alias prefix your frontend imports use (`from '@core/...'`, `from '@/...'`).
 3. Run scan — confirm `scan config: path aliases loaded`.
 4. If cross-language traces have no `HTTP_REQUEST` edge, re-check aliases first.

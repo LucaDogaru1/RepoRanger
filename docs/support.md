@@ -1,6 +1,6 @@
 # Language support
 
-ImpactLens is built around **one graph model** and **one scanner per language**. The CLI analyzers work on whatever lands in `Graph.sqlite` — but scan quality depends heavily on how mature each language pipeline is.
+RepoRanger is built around **one graph model** and **one scanner per language**. The CLI analyzers work on whatever lands in `Graph.sqlite` — but scan quality depends heavily on how mature each language pipeline is.
 
 ## Supported today
 
@@ -16,7 +16,7 @@ Use `--lang=both` to scan PHP and JS/Vue/Nuxt in one run (typical for Laravel + 
 **Cross-language linking** (UI → HTTP → controller) is supported when:
 
 - PHP route nodes exist in the graph, and
-- JS resolves imports (often needs `impactlens.config.json` for `@/` aliases), and
+- JS resolves imports (often needs `repo-ranger.config.json` for `@/` aliases), and
 - HTTP calls match known patterns (`fetch`, `$fetch`, `useFetch`, registry-based API clients, etc.)
 
 See [config-setup.md](config-setup.md) for copy-paste examples, or [scan-config.md](scan-config.md) for the full reference.
@@ -48,7 +48,7 @@ Nuxt monorepos are supported under `--lang=js` (same flag as JS/Vue). Tested on 
 **Works well today**
 
 - TypeScript composables and `.vue` SFCs (`<script setup lang="ts">`)
-- Package-scoped import aliases (`@core/`, `@content/`, etc.) via `impactlens.config.json` — see [config-setup.md](config-setup.md)
+- Package-scoped import aliases (`@core/`, `@content/`, etc.) via `repo-ranger.config.json` — see [config-setup.md](config-setup.md)
 - `$fetch` / `useFetch` when the URL contains an `api/v…` path (string literals, template literals, or `computed(() => \`…\`)` via `unref(url)` / `url.value`)
 - Import and call graph across packages
 

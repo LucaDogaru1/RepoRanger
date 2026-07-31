@@ -16,7 +16,7 @@ const jsonOutput = hasFlag(args, "--json");
 const outputPath = getOptionValue(args, "--output");
 
 if (!dbPath || !query) {
-    console.log(`Usage: impactlens find <db.sqlite> "<query>" [--kind=auto|symbol|route|field|config|all] [--limit=20] [--json] [--output=file.txt]`);
+    console.log(`Usage: repo-ranger find <db.sqlite> "<query>" [--kind=auto|symbol|route|field|config|all] [--limit=20] [--json] [--output=file.txt]`);
     process.exit(2);
 }
 
@@ -48,7 +48,7 @@ try {
             console.log("Try these normalized queries:");
             for (const suggestion of suggestions) {
                 const suggestionKind = effectiveKind === "route" ? "route" : kind;
-                console.log(`  impactlens find ${dbPath} "${suggestion}" --kind=${suggestionKind}`);
+                console.log(`  repo-ranger find ${dbPath} "${suggestion}" --kind=${suggestionKind}`);
             }
         }
         if (effectiveKind === "route") {
@@ -84,7 +84,7 @@ try {
     lines.push("");
     lines.push("## Next");
     lines.push("");
-    lines.push(`impactlens ai-context ${dbPath} "${matches[0]!.id.replace(/\\/g, "\\\\")}" --compact`);
+    lines.push(`repo-ranger ai-context ${dbPath} "${matches[0]!.id.replace(/\\/g, "\\\\")}" --compact`);
     lines.push("");
 
     const output = lines.join("\n");

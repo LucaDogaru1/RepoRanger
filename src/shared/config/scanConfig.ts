@@ -12,8 +12,8 @@ const DEFAULT_CONFIG: ScanConfig = {
 
 export function loadScanConfig(rootDir: string): ScanConfig {
     const candidates = [
-        path.join(rootDir, "impactlens.config.json"),
-        path.join(rootDir, ".impactlens.json"),
+        path.join(rootDir, "repo-ranger.config.json"),
+        path.join(rootDir, ".repo-ranger.json"),
     ];
 
     for (const candidate of candidates) {

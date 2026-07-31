@@ -1,8 +1,8 @@
-# ImpactLens
+# RepoRanger
 
 Static code graph and navigation CLI for **PHP/Laravel**, **JavaScript/TypeScript**, **Vue**, and **Nuxt**.
 
-ImpactLens answers navigation questions before you grep blindly:
+RepoRanger answers navigation questions before you grep blindly:
 
 - Where does this API route land in PHP?
 - What does this controller call — including services and query layers?
@@ -18,15 +18,15 @@ It does **not** replace reading code. It helps you find the right files faster �
 ## Install
 
 ```bash
-npm install impactlens
+npm install repo-ranger
 ```
 
-This installs the `impactlens` CLI and writes the agent skill to `.cursor/skills/impactlens/SKILL.md` (skip with `IMPACTLENS_SKIP_SKILL=1`).
+This installs the `repo-ranger` CLI and writes the agent skill to `.cursor/skills/repo-ranger/SKILL.md` (skip with `REPO_RANGER_SKIP_SKILL=1`).
 
 ```bash
-npx impactlens --help
-npx impactlens --commands
-npx impactlens install-skill   # reinstall skill later
+npx repo-ranger --help
+npx repo-ranger --commands
+npx repo-ranger install-skill   # reinstall skill later
 ```
 
 **Requirements:** Node.js 18+
@@ -38,30 +38,30 @@ npx impactlens install-skill   # reinstall skill later
 ### 1. Scan the repository
 
 ```bash
-impactlens scan /path/to/repo --lang=both --output=sqlite --sqlite-path=sqlite/Graph.sqlite --no-merge
+repo-ranger scan /path/to/repo --lang=both --output=sqlite --sqlite-path=sqlite/Graph.sqlite --no-merge
 ```
 
 **Separate frontend and backend folders?** Pass multiple scan roots in one command — they merge into a single `Graph.sqlite`:
 
 ```bash
-impactlens scan /path/to/backend /path/to/frontend --lang=both --output=sqlite --sqlite-path=sqlite/Graph.sqlite --no-merge
+repo-ranger scan /path/to/backend /path/to/frontend --lang=both --output=sqlite --sqlite-path=sqlite/Graph.sqlite --no-merge
 ```
 
 File paths in the graph are prefixed with each root folder name (e.g. `backend/app/...`, `frontend/src/...`).
 
-Use `impactlens.config.json` at each scan root when the project uses path aliases (`@/`, etc.). See [`docs/config-setup.md`](docs/config-setup.md).
+Use `repo-ranger.config.json` at each scan root when the project uses path aliases (`@/`, etc.). See [`docs/config-setup.md`](docs/config-setup.md).
 
 ### 2. Find a route or symbol
 
 ```bash
 # Ticket-style route (preferred for HTTP work)
-impactlens find sqlite/Graph.sqlite "GET /api/v3/contents/{id}/multiview" --kind=route
+repo-ranger find sqlite/Graph.sqlite "GET /api/v3/contents/{id}/multiview" --kind=route
 
 # Path suffix also works
-impactlens find sqlite/Graph.sqlite multiview --kind=route
+repo-ranger find sqlite/Graph.sqlite multiview --kind=route
 
 # PHP class / method
-impactlens find sqlite/Graph.sqlite RelatedContentController::index
+repo-ranger find sqlite/Graph.sqlite RelatedContentController::index
 ```
 
 Route tips:
@@ -73,10 +73,10 @@ Route tips:
 
 ```bash
 # From route endpoint
-impactlens trace sqlite/Graph.sqlite "api:GET:contents/{param}/multiview" --depth=3
+repo-ranger trace sqlite/Graph.sqlite "api:GET:contents/{param}/multiview" --depth=3
 
 # From controller method
-impactlens ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\FooController::index" --compact --depth=3 --limit=25
+repo-ranger ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\FooController::index" --compact --depth=3 --limit=25
 ```
 
 `trace` and `ai-context` walk **outgoing `CALLS` chains** with bounded depth:
@@ -100,13 +100,13 @@ For deep Laravel stacks (controller → service → query), try `--depth=3` or `
 
 ```bash
 # 1. Route
-impactlens find sqlite/Graph.sqlite "GET /api/v3/contents/{id}/related-contents" --kind=route
+repo-ranger find sqlite/Graph.sqlite "GET /api/v3/contents/{id}/related-contents" --kind=route
 
 # 2. Context from the route id
-impactlens ai-context sqlite/Graph.sqlite "api:GET:contents/{param}/related-contents" --compact --depth=3
+repo-ranger ai-context sqlite/Graph.sqlite "api:GET:contents/{param}/related-contents" --compact --depth=3
 
 # 3. Or trace for coverage-style output
-impactlens trace sqlite/Graph.sqlite "api:GET:contents/{param}/related-contents" --depth=3
+repo-ranger trace sqlite/Graph.sqlite "api:GET:contents/{param}/related-contents" --depth=3
 ```
 
 Expected chain: **route → controller → service → query methods** (when the scanner resolved them).
@@ -149,7 +149,7 @@ Not covered: full DI container resolution, runtime `app()` bindings, every fluen
 
 ## For AI agents (Cursor)
 
-After `npm install impactlens`, use the generated skill in `.cursor/skills/impactlens/SKILL.md`.
+After `npm install repo-ranger`, use the generated skill in `.cursor/skills/repo-ranger/SKILL.md`.
 
 Guidance for agents:
 
@@ -167,10 +167,10 @@ Bundled skill template: [`assets/agent-skill/SKILL.md`](assets/agent-skill/SKILL
 Clone and run from source:
 
 ```bash
-git clone https://github.com/LucaDogaru1/ImpectLens.git
-cd ImpectLens
+git clone https://github.com/LucaDogaru1/RepoRanger.git
+cd RepoRanger
 npm install
-node bin/impactlens.js --help
+node bin/repo-ranger.js --help
 ```
 
 Useful tests:
@@ -183,8 +183,6 @@ npm run test:route-file-extractor
 npm run test:navigation
 npx tsx test/scanner/php/semantic/resolveExpressionType.test.ts
 ```
-
-Benchmark validation notes (internal): `benchmark/ROUTE_SEARCH_VALIDATION.md`
 
 ---
 

@@ -2,10 +2,10 @@
 
 > **New to path aliases?** Start with [config-setup.md](config-setup.md) — copy-paste examples for Laravel+Vue, Nuxt, and Vite.
 
-ImpactLens reads an optional config file from the **scan root** (the path you pass to `npm run scan`):
+RepoRanger reads an optional config file from the **scan root** (the path you pass to `npm run scan`):
 
-- `impactlens.config.json`
-- `.impactlens.json` (fallback)
+- `repo-ranger.config.json`
+- `.repo-ranger.json` (fallback)
 
 If neither exists, defaults apply.
 
@@ -35,7 +35,7 @@ If neither exists, defaults apply.
 
 Frontend code often uses **compile-time import aliases** (`@/`, `~`, `@components/`). Webpack/Vite resolve these at build time; the scanner only sees the string in source.
 
-ImpactLens links imports to graph nodes by resolving that string to a file path:
+RepoRanger links imports to graph nodes by resolving that string to a file path:
 
 ```javascript
 import API from '@/api/index'

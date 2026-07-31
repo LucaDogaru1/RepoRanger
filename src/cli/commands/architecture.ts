@@ -29,7 +29,7 @@ if (architectureConfigPath) {
 }
 
 if (!dbPath) {
-    console.log(chalk.red('Usage: npx tsx src/cli/commands/architecture.ts Graph.sqlite [--limit=20] [--json] [--include-depends-on] [--include-interface-resolved] [--ignore-likely-false-positives] [--architecture-config=impactlens.config.json] [--fail-on-violations] [--output=report.txt]'));
+    console.log(chalk.red('Usage: npx tsx src/cli/commands/architecture.ts Graph.sqlite [--limit=20] [--json] [--include-depends-on] [--include-interface-resolved] [--ignore-likely-false-positives] [--architecture-config=repo-ranger.config.json] [--fail-on-violations] [--output=report.txt]'));
     process.exit(2);
 }
 

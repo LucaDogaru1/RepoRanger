@@ -17,10 +17,10 @@ Use it after `find` when you want a single readable story: route → controller 
 ## Commands
 
 ```bash
-impactlens trace sqlite/Graph.sqlite PaymentController::pay
-impactlens trace sqlite/Graph.sqlite "POST /payments"
-impactlens trace sqlite/Graph.sqlite "api:POST:api/payments"
-impactlens trace sqlite/Graph.sqlite PaymentController::pay --json
+repo-ranger trace sqlite/Graph.sqlite PaymentController::pay
+repo-ranger trace sqlite/Graph.sqlite "POST /payments"
+repo-ranger trace sqlite/Graph.sqlite "api:POST:api/payments"
+repo-ranger trace sqlite/Graph.sqlite PaymentController::pay --json
 ```
 
 npm scripts:

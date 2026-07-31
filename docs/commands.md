@@ -1,6 +1,6 @@
 # Commands
 
-This page contains detailed command usage for ImpactLens.
+This page contains detailed command usage for RepoRanger.
 
 ## Scan
 
@@ -19,7 +19,7 @@ npm run scan -- /path/to/backend /path/to/frontend --lang=both --no-merge --outp
 npm run scan -- jsproject --lang=js --no-merge --output=json
 ```
 
-Multiple scan roots: pass several project paths (sibling repos). File paths in the graph are prefixed with each root folder name (e.g. `backend/app/...`, `frontend/src/...`). Place `impactlens.config.json` in **each** root that uses path aliases.
+Multiple scan roots: pass several project paths (sibling repos). File paths in the graph are prefixed with each root folder name (e.g. `backend/app/...`, `frontend/src/...`). Place `repo-ranger.config.json` in **each** root that uses path aliases.
 
 Options:
 
@@ -31,7 +31,7 @@ Options:
 | `--graph-json=<file>` | `Graph.json` | JSON output path |
 | `--no-merge` | off | Do not merge into existing `Graph.json` |
 
-**Scan config:** place `impactlens.config.json` at the scan root for path aliases and HTTP resource patterns. See [Scan config](scan-config.md).
+**Scan config:** place `repo-ranger.config.json` at the scan root for path aliases and HTTP resource patterns. See [Scan config](scan-config.md).
 
 Output: graph in JSON, SQLite, or both — consumed by all analysis commands.
 
@@ -249,7 +249,7 @@ JSON output example:
   "violationCount": 1,
   "likelyFalsePositiveCount": 0,
   "actionableViolationCount": 1,
-  "architectureConfigPath": "impactlens.config.example.json",
+  "architectureConfigPath": "repo-ranger.config.example.json",
   "violations": [
     {
       "fromId": "UserRepository::badMethod",
@@ -374,15 +374,15 @@ Purpose: search the graph for symbols, routes, and request fields by fuzzy text.
 
 ```bash
 npm run analyze:find -- <db.sqlite> "<query>" [options]
-impactlens find <db.sqlite> "<query>" [options]
+repo-ranger find <db.sqlite> "<query>" [options]
 ```
 
 Examples:
 
 ```bash
-impactlens find sqlite/Graph.sqlite PaymentController
-impactlens find sqlite/Graph.sqlite "POST /payments" --kind=route
-impactlens find sqlite/Graph.sqlite providerCategory --kind=field
+repo-ranger find sqlite/Graph.sqlite PaymentController
+repo-ranger find sqlite/Graph.sqlite "POST /payments" --kind=route
+repo-ranger find sqlite/Graph.sqlite providerCategory --kind=field
 ```
 
 Options:
@@ -402,15 +402,15 @@ Purpose: compact end-to-end flow report for one symbol — route → controller 
 
 ```bash
 npm run analyze:trace -- <db.sqlite> "<symbol>" [options]
-impactlens trace <db.sqlite> "<symbol>" [options]
+repo-ranger trace <db.sqlite> "<symbol>" [options]
 ```
 
 Examples:
 
 ```bash
-impactlens trace sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay"
-impactlens trace sqlite/Graph.sqlite "api:POST:api/payments"
-impactlens trace sqlite/Graph.sqlite PaymentController::pay --json --output=trace.json
+repo-ranger trace sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentController::pay"
+repo-ranger trace sqlite/Graph.sqlite "api:POST:api/payments"
+repo-ranger trace sqlite/Graph.sqlite PaymentController::pay --json --output=trace.json
 ```
 
 Options:
