@@ -115,6 +115,10 @@ function scoreMatch(
         return { score: 1000, matchReason: "exact id" };
     }
 
+    if (id.endsWith(`\\${q}`) || id === q) {
+        return { score: 980, matchReason: "exact qualified symbol" };
+    }
+
     if (id.endsWith(`::${q}`) || id.endsWith(`\\${q}`)) {
         return { score: 900, matchReason: "exact symbol suffix" };
     }
@@ -153,12 +157,26 @@ function scoreMatch(
 function scoreMatchAgainstVariants(
     variants: QueryVariant[],
     row: NodeRow,
+    rawQuery?: string,
 ): { score: number; matchReason: string } {
     let best = { score: 0, matchReason: "weak match" };
 
     for (const variant of variants) {
         const scored = scoreMatch(variant.text, row);
-        const bonus = VARIANT_SCORE_BONUS[variant.source];
+        let bonus = VARIANT_SCORE_BONUS[variant.source];
+
+        if (
+            rawQuery
+            && variant.source === "token"
+            && looksLikePascalCaseSymbol(rawQuery)
+            && variant.text.length < rawQuery.length
+            && (row.id.endsWith(`\\${variant.text}`) || row.id.endsWith(`::${variant.text}`))
+            && !row.id.toLowerCase().endsWith(`\\${rawQuery.toLowerCase()}`)
+            && !row.id.toLowerCase().includes(`\\${rawQuery.toLowerCase()}::`)
+        ) {
+            bonus -= 250;
+        }
+
         const totalScore = scored.score + bonus;
         if (totalScore > best.score) {
             best = {
@@ -376,6 +394,34 @@ function buildLikePatterns(variants: QueryVariant[]): string[] {
     return [...patterns];
 }
 
+function looksLikePascalCaseSymbol(query: string): boolean {
+    return /^[A-Z][A-Za-z0-9]+$/.test(query);
+}
+
+function fetchSymbolRowsBySuffix(
+    db: SQLiteDatabase,
+    suffix: string,
+    types: string[] | null,
+): NodeRow[] {
+    const classPattern = `%\\${escapeLike(suffix)}`;
+    const methodPattern = `%\\${escapeLike(suffix)}::%`;
+    const typeClause = types
+        ? `AND type IN (${types.map(() => "?").join(", ")})`
+        : "";
+
+    return db.prepare(`
+        SELECT id, type, name, file
+        FROM nodes
+        WHERE (
+            id LIKE ? ESCAPE '\\'
+            OR id LIKE ? ESCAPE '\\'
+        )
+        ${typeClause}
+        ORDER BY id ASC
+        LIMIT 50
+    `).all(methodPattern, classPattern, ...(types ?? [])) as NodeRow[];
+}
+
 function fetchSymbolRows(
     db: SQLiteDatabase,
     patterns: string[],
@@ -426,6 +472,16 @@ function runSearch(
         rows = fetchRouteRows(db, routePlan);
     } else {
         rows = fetchSymbolRows(db, buildLikePatterns(variants), types);
+        if (looksLikePascalCaseSymbol(query)) {
+            const suffixRows = fetchSymbolRowsBySuffix(db, query, types);
+            rows = [...suffixRows, ...rows.filter(row => !suffixRows.some(item => item.id === row.id))];
+        } else if (query.includes("::")) {
+            const classPart = query.split("::")[0] ?? "";
+            if (looksLikePascalCaseSymbol(classPart) || classPart.includes("\\")) {
+                const suffixRows = fetchSymbolRowsBySuffix(db, query, types);
+                rows = [...suffixRows, ...rows.filter(row => !suffixRows.some(item => item.id === row.id))];
+            }
+        }
     }
 
     const exact = db.prepare(`
@@ -446,7 +502,7 @@ function runSearch(
                 return { ...row, score, matchReason };
             }
 
-            const { score, matchReason } = scoreMatchAgainstVariants(variants, row);
+            const { score, matchReason } = scoreMatchAgainstVariants(variants, row, query);
             return { ...row, score, matchReason };
         })
         .filter(row => row.score > 0)
