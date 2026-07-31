@@ -97,5 +97,3 @@ Next steps for stronger public claims: more diverse tickets/repos, stable CLI ex
 | Multiview | `933aad21` | 0 telemetry events | Exclude from nav metrics only |
 | Image | 4 WITH runs | EPERM/Sandbox | Navigation usable, ImpactLens weakened |
 | UTR, Cat3, Multiview | various | Dirty worktree / Redis / DB blocks | Duration interpretation only |
-
-Raw per-run numbers: see `summary/` and `benchmarkSummary/` files.
