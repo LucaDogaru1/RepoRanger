@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 type CommandDef = {
@@ -141,18 +140,59 @@ Docs: https://github.com/LucaDogaru1/ImpectLens
 `);
 }
 
-function tsxCliPath(): string {
-    return path.join(path.dirname(require.resolve("tsx/package.json")), "dist", "cli.mjs");
+function isSandboxLaunchError(error: unknown): boolean {
+    if (!error || typeof error !== "object") {
+        return false;
+    }
+
+    const err = error as NodeJS.ErrnoException;
+    if (err.code !== "EPERM") {
+        return false;
+    }
+
+    const message = String(err.message ?? "");
+    const syscall = String(err.syscall ?? "");
+
+    if (syscall === "listen" && message.includes(".pipe")) {
+        return true;
+    }
+
+    if (syscall === "spawn" || message.includes("tsx/dist/cli.mjs")) {
+        return true;
+    }
+
+    return false;
+}
+
+function printSandboxLaunchHint(): void {
+    console.error(`ImpactLens failed to start the command.
+
+Cause: EPERM while launching the command runtime.
+Restricted sandbox environments may block subprocess creation.
+Try running the same command in a terminal with full permissions.`);
 }
 
 function runTsScript(relativeScript: string, args: string[]): number {
     const scriptPath = path.join(__dirname, relativeScript);
-    const result = spawnSync(
-        process.execPath,
-        [tsxCliPath(), scriptPath, ...args],
-        { stdio: "inherit", env: process.env }
-    );
-    return result.status === null ? 1 : result.status;
+    const previousArgv = process.argv;
+
+    process.argv = [process.execPath, scriptPath, ...args];
+    process.exitCode = 0;
+
+    try {
+        // bin/impactlens.js registers tsx/cjs; require() runs commands in-process.
+        // Dynamic import() does not use that loader for .ts files in this CJS package.
+        require(scriptPath);
+        return process.exitCode ?? 0;
+    } catch (error) {
+        if (isSandboxLaunchError(error)) {
+            printSandboxLaunchHint();
+        }
+        console.error(error);
+        return 1;
+    } finally {
+        process.argv = previousArgv;
+    }
 }
 
 function runInstallSkill(): number {
@@ -163,28 +203,40 @@ function runInstallSkill(): number {
     return 0;
 }
 
-const args = process.argv.slice(2);
-const command = args[0];
+function main(): number {
+    const args = process.argv.slice(2);
+    const command = args[0];
 
-if (!command || command === "--help" || command === "-h" || command === "help") {
-    printHelp();
-    process.exit(0);
+    if (!command || command === "--help" || command === "-h" || command === "help") {
+        printHelp();
+        return 0;
+    }
+
+    if (command === "--commands" || command === "commands") {
+        printCommands();
+        return 0;
+    }
+
+    const def = COMMANDS[command];
+    if (!def) {
+        console.error(`Unknown command: ${command}\n`);
+        printHelp();
+        return 1;
+    }
+
+    if (command === "install-skill") {
+        return runInstallSkill();
+    }
+
+    return runTsScript(def.script, args.slice(1));
 }
 
-if (command === "--commands" || command === "commands") {
-    printCommands();
-    process.exit(0);
-}
-
-const def = COMMANDS[command];
-if (!def) {
-    console.error(`Unknown command: ${command}\n`);
-    printHelp();
+try {
+    process.exit(main());
+} catch (error) {
+    if (isSandboxLaunchError(error)) {
+        printSandboxLaunchHint();
+    }
+    console.error(error);
     process.exit(1);
 }
-
-if (command === "install-skill") {
-    process.exit(runInstallSkill());
-}
-
-process.exit(runTsScript(def.script, args.slice(1)));
