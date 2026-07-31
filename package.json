@@ -1,6 +1,6 @@
 {
   "name": "impactlens",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "Static code graph scanner and navigation CLI for AI-assisted development. Currently supports PHP and Laravel, JavaScript, TypeScript, Vue, and Nuxt.",
   "main": "bin/impactlens.js",
   "bin": {
