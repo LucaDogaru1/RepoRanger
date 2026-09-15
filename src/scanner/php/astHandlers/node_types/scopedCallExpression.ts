@@ -208,6 +208,10 @@ function isRouteCall(node: Parser.SyntaxNode): boolean {
     return names[0] === "Route";
 }
 
+function isResourceVerb(verb: string): boolean {
+    return verb === "resource" || verb === "apiresource";
+}
+
 function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
     const names = node.children
         .filter(child => child.type === "name")

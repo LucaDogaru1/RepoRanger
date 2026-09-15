@@ -5,24 +5,48 @@ import {
 } from "../resolvers/fetchEndpointExtractor";
 import { JsWalkContext } from "../walk/context";
 
-function readArrowBodyTemplate(node: Parser.SyntaxNode | null | undefined): string | null {
+function readUrlExpression(
+    node: Parser.SyntaxNode | null | undefined,
+    constants: Map<string, string>
+): string | null {
     if (!node) {
         return null;
     }
 
-    let body = node;
-    if (body.type === "parenthesized_expression") {
-        body = body.namedChildren[0] ?? body;
+    let expression = node;
+    if (expression.type === "parenthesized_expression") {
+        expression = expression.namedChildren[0] ?? expression;
     }
 
-    if (body.type !== "template_string") {
+    if (expression.type === "template_string") {
+        return normalizeInferredFetchPath(resolveTemplateString(expression, constants));
+    }
+
+    if (expression.type === "call_expression") {
+        const callee = expression.childForFieldName("function");
+        if (callee?.type === "identifier") {
+            return constants.get(callee.text) ?? null;
+        }
+    }
+
+    return null;
+}
+
+function readArrowFunctionUrl(
+    valueNode: Parser.SyntaxNode,
+    constants: Map<string, string>
+): string | null {
+    if (valueNode.type !== "arrow_function") {
         return null;
     }
 
-    return normalizeInferredFetchPath(resolveTemplateString(body, new Map()));
+    return readUrlExpression(valueNode.childForFieldName("body"), constants);
 }
 
-function readComputedTemplateUrl(valueNode: Parser.SyntaxNode): string | null {
+function readComputedUrl(
+    valueNode: Parser.SyntaxNode,
+    constants: Map<string, string>
+): string | null {
     if (valueNode.type !== "call_expression") {
         return null;
     }
@@ -38,7 +62,7 @@ function readComputedTemplateUrl(valueNode: Parser.SyntaxNode): string | null {
         return null;
     }
 
-    return readArrowBodyTemplate(callback.childForFieldName("body"));
+    return readUrlExpression(callback.childForFieldName("body"), constants);
 }
 
 function readDeclaratorValue(node: Parser.SyntaxNode): string | null {
@@ -65,7 +89,10 @@ export function trackModuleConstants(node: Parser.SyntaxNode, context: JsWalkCon
         const valueNode = child.childForFieldName("value");
         const value =
             readDeclaratorValue(child) ??
-            (valueNode ? readComputedTemplateUrl(valueNode) : null);
+            (valueNode
+                ? readArrowFunctionUrl(valueNode, context.moduleConstants) ??
+                    readComputedUrl(valueNode, context.moduleConstants)
+                : null);
         if (name && value) {
             context.moduleConstants.set(name, value);
         }

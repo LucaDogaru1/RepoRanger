@@ -116,6 +116,11 @@ export function resolveFetchUrlArg(
         context.moduleConstants.has(resolvedNode.text)
     ) {
         path = context.moduleConstants.get(resolvedNode.text)!;
+    } else if (resolvedNode.type === "call_expression") {
+        const callee = resolvedNode.childForFieldName("function");
+        if (callee?.type === "identifier") {
+            path = context.moduleConstants.get(callee.text) ?? null;
+        }
     }
 
     if (!path) {

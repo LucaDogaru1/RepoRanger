@@ -1,3 +1,4 @@
+import Parser from "tree-sitter";
 import { graph } from "../../../graph/graph";
 import {
     extractVueTemplateMetadata,

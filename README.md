@@ -29,7 +29,7 @@ npx repo-ranger --commands
 npx repo-ranger install-skill   # reinstall skill later
 ```
 
-**Requirements:** Node.js 18+
+**Requirements:** Node.js 20+
 
 ---
 
