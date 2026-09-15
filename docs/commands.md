@@ -396,6 +396,42 @@ Use the returned graph id with `trace`, `ai-context`, or `change-impact`.
 
 ---
 
+## Locate
+
+Purpose: resolve one route, class, method, component, or field and return a
+compact best-path flow plus at most five prioritized source files. A recorded
+Vue/Nuxt `HTTP_REQUEST` is followed into its Laravel route and backend calls.
+
+```bash
+npm run analyze:locate -- <db.sqlite> "<query>" [options]
+repo-ranger locate <db.sqlite> "<query>" [options]
+```
+
+Examples:
+
+```bash
+repo-ranger locate sqlite/Graph.sqlite "GET /api/v3/contents/{id}/multiview" --kind=route
+repo-ranger locate sqlite/Graph.sqlite "App\\Services\\PaymentService::process"
+repo-ranger locate sqlite/Graph.sqlite userCountry --kind=field --json
+```
+
+Options:
+
+| Option | Default | Description |
+|---|---|---|
+| `--kind=auto\|symbol\|route\|field\|config\|all` | `auto` | Restrict match types |
+| `--depth=N` | `3` | Outgoing call depth |
+| `--limit=N` | `12` | Maximum traced calls |
+| `--files=N` | `5` | Prioritized files, hard-capped at 5 |
+| `--json` | off | Structured payload |
+| `--output=<file>` | — | Write text or JSON to file |
+
+Use this as the default navigation command when one concrete anchor is known.
+Use `find` only for alternatives and `trace` only when the compact flow is not
+enough.
+
+---
+
 ## Trace
 
 Purpose: compact end-to-end flow report for one symbol — route → controller → fields → validation → calls, plus coverage gaps.
@@ -610,4 +646,3 @@ npm run analyze:ai-context -- sqlite/Graph.sqlite "SpOTTBackend\\Services\\Conte
 - Laravel route analysis mapped to controller actions.
 - Symfony container wiring analysis.
 - Interactive graph visualization.
-

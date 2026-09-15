@@ -90,6 +90,14 @@ const COMMANDS: Record<string, CommandDef> = {
         script: "commands/trace.ts",
         description: "Same as trace",
     },
+    locate: {
+        script: "commands/locate.ts",
+        description: "Compact best-match flow and prioritized files",
+    },
+    "analyze:locate": {
+        script: "commands/locate.ts",
+        description: "Same as locate",
+    },
     "install-skill": {
         script: "",
         description: "Write .cursor/skills/repo-ranger/SKILL.md in the current project",
@@ -126,6 +134,7 @@ function printHelp(): void {
 Examples:
   repo-ranger scan /path/to/repo --lang=both --output=both
   repo-ranger find sqlite/Graph.sqlite PaymentController
+  repo-ranger locate sqlite/Graph.sqlite "GET /api/v3/contents"
   repo-ranger trace sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar"
   repo-ranger ai-context sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar" --compact
 

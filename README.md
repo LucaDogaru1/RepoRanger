@@ -51,7 +51,16 @@ File paths in the graph are prefixed with each root folder name (e.g. `backend/a
 
 Use `repo-ranger.config.json` at each scan root when the project uses path aliases (`@/`, etc.). See [`docs/config-setup.md`](docs/config-setup.md).
 
-### 2. Find a route or symbol
+### 2. Locate the relevant flow
+
+Use one compact command to resolve the best match, trace its main flow, report
+coverage gaps, and rank at most five source files:
+
+```bash
+repo-ranger locate sqlite/Graph.sqlite "GET /api/v3/contents/{id}/multiview" --kind=route
+```
+
+For alternative matches only, use `find`:
 
 ```bash
 # Ticket-style route (preferred for HTTP work)
@@ -99,14 +108,8 @@ For deep Laravel stacks (controller → service → query), try `--depth=3` or `
 ## Typical workflow (Laravel API ticket)
 
 ```bash
-# 1. Route
-repo-ranger find sqlite/Graph.sqlite "GET /api/v3/contents/{id}/related-contents" --kind=route
-
-# 2. Context from the route id
-repo-ranger ai-context sqlite/Graph.sqlite "api:GET:contents/{param}/related-contents" --compact --depth=3
-
-# 3. Or trace for coverage-style output
-repo-ranger trace sqlite/Graph.sqlite "api:GET:contents/{param}/related-contents" --depth=3
+# One graph call: match → route → controller → service/query → prioritized files
+repo-ranger locate sqlite/Graph.sqlite "GET /api/v3/contents/{id}/related-contents" --kind=route
 ```
 
 Expected chain: **route → controller → service → query methods** (when the scanner resolved them).
@@ -119,6 +122,7 @@ Expected chain: **route → controller → service → query methods** (when the
 |---------|---------|
 | `scan` | Build `Graph.sqlite` / `Graph.json` |
 | `find` | Search symbols, routes, fields (`--kind=route\|symbol\|field\|auto`) |
+| `locate` | Best match, compact flow, coverage, and up to five files |
 | `trace` | End-to-end flow + coverage for one symbol |
 | `ai-context` | Compact report: callers, callees, navigation, risk |
 | `change-impact` | Blast radius scoring |
