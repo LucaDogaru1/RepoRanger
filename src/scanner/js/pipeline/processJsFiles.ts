@@ -6,7 +6,7 @@ import { resetHttpResourceRegistry } from "../resolvers/httpResourceRegistry";
 import { ensureJsModuleNode } from "../astHandlers/jsModule";
 import { ScannedJsFile } from "../scanJs";
 import { stripTypescript } from "../nuxt/stripTypescript";
-import { createTsParser } from "../ts/parser";
+import { createTsParser, createTsxParser } from "../ts/parser";
 import { processTsFile } from "../ts/processTsFile";
 import { processVueFile } from "../vue/processVueFile";
 import walk, { createWalkContext } from "../walk/jsWalker";
@@ -19,7 +19,11 @@ function isVueFile(relativePath: string): boolean {
 }
 
 function isTypeScriptFile(relativePath: string): boolean {
-    return relativePath.endsWith(".ts");
+    return relativePath.endsWith(".ts") || relativePath.endsWith(".tsx");
+}
+
+function isTsxFile(relativePath: string): boolean {
+    return relativePath.endsWith(".tsx");
 }
 
 function readSource(file: ScannedJsFile): string {
@@ -68,6 +72,7 @@ export function processJsFiles(
     populateHttpResourceRegistry(files);
 
     const tsParser = createTsParser();
+    const tsxParser = createTsxParser();
     let vueFiles = 0;
     let vueTsScripts = 0;
     let vueStripFallbackScripts = 0;
@@ -107,7 +112,7 @@ export function processJsFiles(
 
         if (isTypeScriptFile(file.relativePath)) {
             try {
-                processTsFile(file, tsParser);
+                processTsFile(file, isTsxFile(file.relativePath) ? tsxParser : tsParser);
                 tsFiles += 1;
             } catch (error) {
                 try {

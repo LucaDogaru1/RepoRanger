@@ -1,20 +1,29 @@
 import fs from "node:fs";
 import path from "node:path";
+import { discoverPathAliasScopes, type PathAliasScope } from "./discoverPathAliases";
 
 export interface ScanConfig {
     pathAliases?: Record<string, string>;
+    pathAliasScopes?: PathAliasScope[];
     httpResourceClassPattern?: string;
+    scanRoot?: string;
+    graphPathPrefix?: string;
+    explicitConfigPath?: string;
 }
 
 const DEFAULT_CONFIG: ScanConfig = {
     httpResourceClassPattern: "Resource",
 };
 
-export function loadScanConfig(rootDir: string): ScanConfig {
+export function loadScanConfig(rootDir: string, graphPathPrefix: string = ""): ScanConfig {
+    const resolvedRoot = path.resolve(rootDir);
     const candidates = [
-        path.join(rootDir, "repo-ranger.config.json"),
-        path.join(rootDir, ".repo-ranger.json"),
+        path.join(resolvedRoot, "repo-ranger.config.json"),
+        path.join(resolvedRoot, ".repo-ranger.json"),
     ];
+
+    let explicitConfig: Partial<ScanConfig> = {};
+    let explicitConfigPath: string | undefined;
 
     for (const candidate of candidates) {
         if (!fs.existsSync(candidate)) {
@@ -22,12 +31,20 @@ export function loadScanConfig(rootDir: string): ScanConfig {
         }
 
         try {
-            const parsed = JSON.parse(fs.readFileSync(candidate, "utf-8")) as Partial<ScanConfig>;
-            return { ...DEFAULT_CONFIG, ...parsed };
+            explicitConfig = JSON.parse(fs.readFileSync(candidate, "utf-8")) as Partial<ScanConfig>;
+            explicitConfigPath = candidate;
+            break;
         } catch {
             continue;
         }
     }
 
-    return DEFAULT_CONFIG;
+    return {
+        ...DEFAULT_CONFIG,
+        ...explicitConfig,
+        pathAliasScopes: discoverPathAliasScopes(resolvedRoot),
+        scanRoot: resolvedRoot,
+        graphPathPrefix,
+        explicitConfigPath,
+    };
 }

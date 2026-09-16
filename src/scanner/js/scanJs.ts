@@ -6,7 +6,7 @@ export interface ScannedJsFile {
     relativePath: string;
 }
 
-const JS_EXTENSIONS = [".js", ".mjs", ".cjs", ".vue", ".ts"];
+const JS_EXTENSIONS = [".js", ".mjs", ".cjs", ".jsx", ".vue", ".ts", ".tsx"];
 
 export function scanJsFiles(
     rootDir: string,

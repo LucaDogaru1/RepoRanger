@@ -2,12 +2,14 @@
 
 > **New to path aliases?** Start with [config-setup.md](config-setup.md) — copy-paste examples for Laravel+Vue, Nuxt, and Vite.
 
-RepoRanger reads an optional config file from the **scan root** (the path you pass to `npm run scan`):
+RepoRanger auto-detects statically declared aliases from TypeScript, JavaScript,
+Nuxt, Vite, and webpack configuration. It also reads an optional override file
+from the **scan root** (the path you pass to `npm run scan`):
 
 - `repo-ranger.config.json`
 - `.repo-ranger.json` (fallback)
 
-If neither exists, defaults apply.
+If neither exists, auto-detected aliases and defaults apply.
 
 ## Example
 
@@ -33,7 +35,9 @@ If neither exists, defaults apply.
 
 ### Why they are needed
 
-Frontend code often uses **compile-time import aliases** (`@/`, `~`, `@components/`). Webpack/Vite resolve these at build time; the scanner only sees the string in source.
+Frontend code often uses **compile-time import aliases** (`@/`, `~`, `@components/`).
+RepoRanger reads static aliases from the same configuration files as the build.
+The override file is still needed when the configuration computes aliases at runtime.
 
 RepoRanger links imports to graph nodes by resolving that string to a file path:
 
@@ -41,13 +45,13 @@ RepoRanger links imports to graph nodes by resolving that string to a file path:
 import API from '@/api/index'
 ```
 
-**Without aliases:**
+**When an alias cannot be detected:**
 
 ```text
 @/api/index  →  js:@/api/index.js   (no such file — linking fails)
 ```
 
-**With aliases:**
+**With auto-detection or an explicit override:**
 
 ```text
 @/api/index  →  apps/spott-backend/resources/assets/js/api/index.js

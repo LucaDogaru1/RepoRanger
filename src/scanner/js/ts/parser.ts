@@ -6,3 +6,9 @@ export function createTsParser(): Parser {
     parser.setLanguage(TypeScript.typescript);
     return parser;
 }
+
+export function createTsxParser(): Parser {
+    const parser = new Parser();
+    parser.setLanguage(TypeScript.tsx);
+    return parser;
+}

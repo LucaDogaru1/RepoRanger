@@ -49,7 +49,9 @@ repo-ranger scan /path/to/backend /path/to/frontend --lang=both --output=sqlite 
 
 File paths in the graph are prefixed with each root folder name (e.g. `backend/app/...`, `frontend/src/...`).
 
-Use `repo-ranger.config.json` at each scan root when the project uses path aliases (`@/`, etc.). See [`docs/config-setup.md`](docs/config-setup.md).
+RepoRanger auto-detects path aliases from `tsconfig.json`, `jsconfig.json`, Nuxt,
+Vite, and webpack configuration. Use `repo-ranger.config.json` only to override
+dynamic or non-standard aliases. See [`docs/config-setup.md`](docs/config-setup.md).
 
 ### 2. Locate the relevant flow
 

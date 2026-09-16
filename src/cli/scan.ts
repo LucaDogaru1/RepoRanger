@@ -80,13 +80,23 @@ if (language === "js" || language === "both") {
 
     for (let index = 0; index < rootDirs.length; index += 1) {
         const rootDir = rootDirs[index]!;
-        const scanConfig = loadScanConfig(rootDir);
+        const prefix = pathPrefixForRoot(rootDir);
+        const scanConfig = loadScanConfig(rootDir, prefix);
 
         if (scanConfig.pathAliases && Object.keys(scanConfig.pathAliases).length > 0) {
-            console.log(`scan config (${rootDir}): path aliases loaded`);
+            console.log(`scan config (${rootDir}): explicit path aliases loaded`);
+        }
+        if (scanConfig.pathAliasScopes && scanConfig.pathAliasScopes.length > 0) {
+            const aliasCount = scanConfig.pathAliasScopes.reduce(
+                (total, scope) => total + Object.keys(scope.pathAliases).length,
+                0
+            );
+            console.log(
+                `scan config (${rootDir}): auto-detected ${aliasCount} path aliases ` +
+                `in ${scanConfig.pathAliasScopes.length} scope(s)`
+            );
         }
 
-        const prefix = pathPrefixForRoot(rootDir);
         const discoverProgress = createScanProgress({ label: "Finding JS files" });
         discoverProgress.start();
         const jsFiles = prefixRelativePaths(scanJsFiles(rootDir, DEFAULT_SCAN_IGNORE), prefix);
