@@ -263,7 +263,7 @@ export function buildTrace(
     }
 
     const { target, matchReason } = resolved;
-    const controllerMethodId = target.type === "api_endpoint"
+    const controllerMethodId = target.type === "api_endpoint" || target.type === "http_endpoint"
         ? findRouteControllerMethod(db, target.id)
         : null;
     const analysisNodeId = controllerMethodId ?? target.id;

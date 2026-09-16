@@ -72,7 +72,7 @@ function recordFetchEndpoint(
 
     graph.nodes.set(endpointId, {
         id: endpointId,
-        type: "api_endpoint",
+        type: "http_endpoint",
         name: label,
         file: context.file,
         keywords: [

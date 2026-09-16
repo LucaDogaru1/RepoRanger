@@ -73,7 +73,7 @@ const fetchUser = async () => {
 
     const httpEdges = [...graph.edges.values()].filter(edge => edge.type === "HTTP_REQUEST");
     assert.equal(httpEdges.length, 1);
-    assert.equal(httpEdges[0]?.to, "api:GET:/api/v3/cleeng/user");
+    assert.equal(httpEdges[0]?.to, "http:GET:/api/v3/cleeng/user");
     assert.equal(httpEdges[0]?.via, "$fetch");
 }
 
@@ -92,7 +92,7 @@ const load = async () => {
 
     const httpEdges = [...graph.edges.values()].filter(edge => edge.type === "HTTP_REQUEST");
     assert.equal(httpEdges.length, 1);
-    assert.equal(httpEdges[0]?.to, "api:GET:/api/v3/pages/{param}");
+    assert.equal(httpEdges[0]?.to, "http:GET:/api/v3/pages/{param}");
     assert.equal(httpEdges[0]?.via, "useFetch");
 }
 
@@ -114,7 +114,7 @@ const load = async () => {
 
     const httpEdges = [...graph.edges.values()].filter(edge => edge.type === "HTTP_REQUEST");
     assert.equal(httpEdges.length, 1);
-    assert.equal(httpEdges[0]?.to, "api:GET:/api/v3/contents/search");
+    assert.equal(httpEdges[0]?.to, "http:GET:/api/v3/contents/search");
     assert.equal(httpEdges[0]?.via, "$fetch");
 }
 

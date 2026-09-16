@@ -6,6 +6,7 @@ import { findNode } from "../../../src/graph/queries/GraphQueries";
 import {
     filterFieldFlowEdges,
     findRouteScopedGraphEntries,
+    shortNavigationLabel,
 } from "../../../src/graph/queries/navigationQueries";
 
 const db = new Database(":memory:");
@@ -19,6 +20,8 @@ INSERT INTO nodes VALUES
   ('SpOTT\\Page\\ModuleTypeOptionCasts\\ParagraphSection\\ParagraphSectionSettings', NULL, 'class', 'ParagraphSectionSettings', 'packages/spott-common/src/Page/ModuleTypeOptionCasts/ParagraphSection/ParagraphSectionSettings.php', 1, 40),
   ('apps/spott-backend/resources/assets/js/views/pagemanager/module/options/VerticalPromotionElement.vue', NULL, 'vue_component', 'VerticalPromotionElement', 'apps/spott-backend/resources/assets/js/views/pagemanager/module/options/VerticalPromotionElement.vue', 1, 80),
   ('api:POST:api/payments', NULL, 'api_endpoint', 'api/payments', 'routes/api.php', NULL, NULL),
+  ('http:POST:/api/payments', NULL, 'http_endpoint', 'POST /api/payments', 'resources/js/checkout.ts', NULL, NULL),
+  ('js:resources/js/checkout.ts::submit', NULL, 'method', 'submit', 'resources/js/checkout.ts', 1, 10),
   ('api:GET:/checkout/pay', NULL, 'api_endpoint', '/checkout/pay', 'routes/api.php', NULL, NULL),
   ('api:GET:config/settings', NULL, 'api_endpoint', 'config/settings', 'routes/api.v3.php', NULL, NULL),
   ('api:POST:{param}/api/v3/contents/{param}/check-access', NULL, 'api_endpoint', 'k6 check', 'k6/helpers.js', NULL, NULL),
@@ -28,6 +31,8 @@ INSERT INTO nodes VALUES
 
 INSERT INTO edges VALUES
   ('api:POST:api/payments', 'App\\Http\\Controllers\\PaymentController::pay', 'ROUTES_TO', NULL, NULL),
+  ('http:POST:/api/payments', 'api:POST:api/payments', 'RESOLVES_TO', NULL, NULL),
+  ('js:resources/js/checkout.ts::submit', 'http:POST:/api/payments', 'HTTP_REQUEST', NULL, '$fetch'),
   ('api:GET:/checkout/pay', 'App\\Http\\Controllers\\PaymentController::pay', 'ROUTES_TO', NULL, NULL),
   ('resources/views/payments/form.blade.php', 'App\\Http\\Controllers\\PaymentController::pay', 'BLADE_USES_ACTION', NULL, NULL),
   ('request_field:amount', 'App\\Http\\Controllers\\PaymentController::pay::$data.amount', 'ASSIGNS', NULL, NULL),
@@ -103,6 +108,20 @@ assert.equal(routeNavigation.bladeEntries.length, 0, "route target does not pull
 assert.ok(
     !routeNavigation.graphEntries.some(entry => entry.kind === "route" && entry.from === "api:GET:/checkout/pay"),
     "route-scoped graph entries exclude other routes to the same controller",
+);
+assert.ok(
+    routeNavigation.httpUpstream.some(entry => entry.componentId === "js:resources/js/checkout.ts::submit"),
+    "route navigation follows HTTP_REQUEST through RESOLVES_TO",
+);
+
+const httpTarget = findNode(db, "http:POST:/api/payments")!;
+assert.equal(shortNavigationLabel(httpTarget.id), "POST /api/payments");
+const httpNavigation = gatherNavigationContext(db, httpTarget, { callees: [] });
+assert.equal(httpNavigation.routeEntries[0]?.endpointId, "api:POST:api/payments");
+assert.equal(
+    httpNavigation.routeEntries[0]?.controllerMethod,
+    "App\\Http\\Controllers\\PaymentController::pay",
+    "HTTP endpoint navigation resolves to its backend controller without merging identities",
 );
 
 const scopedEntries = findRouteScopedGraphEntries(

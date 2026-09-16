@@ -145,14 +145,47 @@ export function findRouteControllerMethod(
     endpointId: string,
 ): string | null {
     const row = db.prepare(`
-        SELECT to_id
-        FROM edges
-        WHERE type = 'ROUTES_TO'
-          AND from_id = ?
+        SELECT route.to_id
+        FROM edges route
+        WHERE route.type = 'ROUTES_TO'
+          AND (
+            route.from_id = ?
+            OR EXISTS (
+              SELECT 1
+              FROM edges resolution
+              WHERE resolution.type = 'RESOLVES_TO'
+                AND resolution.from_id = ?
+                AND resolution.to_id = route.from_id
+            )
+          )
         LIMIT 1
-    `).get(endpointId) as { to_id?: string } | undefined;
+    `).get(endpointId, endpointId) as { to_id?: string } | undefined;
 
     return row?.to_id ?? null;
+}
+
+export function findResolvedRouteEndpoint(
+    db: SQLiteDatabase,
+    endpointId: string,
+): string | null {
+    const row = db.prepare(`
+        SELECT route.from_id
+        FROM edges route
+        WHERE route.type = 'ROUTES_TO'
+          AND (
+            route.from_id = ?
+            OR EXISTS (
+              SELECT 1
+              FROM edges resolution
+              WHERE resolution.type = 'RESOLVES_TO'
+                AND resolution.from_id = ?
+                AND resolution.to_id = route.from_id
+            )
+          )
+        LIMIT 1
+    `).get(endpointId, endpointId) as { from_id?: string } | undefined;
+
+    return row?.from_id ?? null;
 }
 
 export function findHttpClientsForEndpoint(
@@ -164,10 +197,19 @@ export function findHttpClientsForEndpoint(
         SELECT e.from_id AS component_id, e.to_id AS endpoint_id
         FROM edges e
         WHERE e.type = 'HTTP_REQUEST'
-          AND e.to_id = ?
+          AND (
+            e.to_id = ?
+            OR EXISTS (
+              SELECT 1
+              FROM edges resolution
+              WHERE resolution.type = 'RESOLVES_TO'
+                AND resolution.from_id = e.to_id
+                AND resolution.to_id = ?
+            )
+          )
         ORDER BY e.from_id ASC
         LIMIT ?
-    `).all(endpointId, limit) as Array<{ component_id: string; endpoint_id: string }>;
+    `).all(endpointId, endpointId, limit) as Array<{ component_id: string; endpoint_id: string }>;
 
     return rows.map(row => ({
         componentId: row.component_id,
@@ -220,10 +262,19 @@ export function findRouteScopedGraphEntries(
         FROM edges e
         LEFT JOIN nodes n ON n.id = e.from_id
         WHERE e.type = 'HTTP_REQUEST'
-          AND e.to_id = ?
+          AND (
+            e.to_id = ?
+            OR EXISTS (
+              SELECT 1
+              FROM edges resolution
+              WHERE resolution.type = 'RESOLVES_TO'
+                AND resolution.from_id = e.to_id
+                AND resolution.to_id = ?
+            )
+          )
         ORDER BY e.from_id ASC
         LIMIT ?
-    `).all(endpointId, limit) as Array<{ from_id: string; file: string | null }>;
+    `).all(endpointId, endpointId, limit) as Array<{ from_id: string; file: string | null }>;
 
     const entries: GraphEntryRow[] = [
         ...httpClients.map(row => ({
@@ -310,7 +361,17 @@ export function findHttpUpstream(
     const rows = db.prepare(`
         SELECT h.from_id AS component_id, h.to_id AS endpoint_id, r.to_id AS controller_method
         FROM edges h
-        LEFT JOIN edges r ON r.from_id = h.to_id AND r.type = 'ROUTES_TO'
+        LEFT JOIN edges r ON r.type = 'ROUTES_TO'
+          AND (
+            r.from_id = h.to_id
+            OR EXISTS (
+              SELECT 1
+              FROM edges resolution
+              WHERE resolution.type = 'RESOLVES_TO'
+                AND resolution.from_id = h.to_id
+                AND resolution.to_id = r.from_id
+            )
+          )
         WHERE h.type = 'HTTP_REQUEST'
           AND r.to_id = ?
         ORDER BY h.from_id ASC
@@ -467,7 +528,7 @@ export function preferConcreteCallTargets<T extends { id: string }>(calls: T[]):
 }
 
 export function shortNavigationLabel(nodeId: string): string {
-    if (nodeId.startsWith("api:")) {
+    if (nodeId.startsWith("api:") || nodeId.startsWith("http:")) {
         const parts = nodeId.split(":");
         return `${parts[1] ?? "HTTP"} ${parts.slice(2).join(":")}`;
     }

@@ -19,6 +19,8 @@ import {
     findMethodScopedEdges,
     findOutgoingEdgesByType,
     findRouteScopedGraphEntries,
+    findResolvedRouteEndpoint,
+    findRouteControllerMethod,
 } from "../../graph/queries/navigationQueries";
 
 type SQLiteDatabase = InstanceType<typeof Database>;
@@ -118,23 +120,24 @@ export function gatherNavigationContext(
         partial.validates = dedupeEdges(partial.validates).slice(0, limit);
         partial.persists = dedupeEdges(partial.persists).slice(0, limit);
         partial.configRefs = dedupeEdges(partial.configRefs).slice(0, limit);
-    } else if (target.type === "api_endpoint") {
-        const routeTarget = db.prepare(`
-            SELECT to_id FROM edges WHERE type = 'ROUTES_TO' AND from_id = ? LIMIT 1
-        `).get(target.id) as { to_id?: string } | undefined;
+    } else if (target.type === "api_endpoint" || target.type === "http_endpoint") {
+        const routeEndpointId = findResolvedRouteEndpoint(db, target.id);
+        const controllerMethod = findRouteControllerMethod(db, target.id);
 
         partial = {
-            routeEntries: routeTarget?.to_id
-                ? [{ endpointId: target.id, controllerMethod: routeTarget.to_id }]
+            routeEntries: routeEndpointId && controllerMethod
+                ? [{ endpointId: routeEndpointId, controllerMethod }]
                 : [],
             bladeEntries: [],
-            graphEntries: routeTarget?.to_id
-                ? findRouteScopedGraphEntries(db, target.id, routeTarget.to_id, {
+            graphEntries: routeEndpointId && controllerMethod
+                ? findRouteScopedGraphEntries(db, routeEndpointId, controllerMethod, {
                     limit,
                     includeInterfaceResolved,
                 })
                 : [],
-            httpUpstream: findHttpClientsForEndpoint(db, target.id, limit),
+            httpUpstream: routeEndpointId
+                ? findHttpClientsForEndpoint(db, routeEndpointId, limit)
+                : [],
             fieldAssignments: [],
             fieldFlowsOut: [],
             validates: [],
@@ -142,8 +145,8 @@ export function gatherNavigationContext(
             configRefs: [],
         };
 
-        if (routeTarget?.to_id) {
-            const methodNav = gatherForMethod(db, routeTarget.to_id, limit, includeInterfaceResolved);
+        if (controllerMethod) {
+            const methodNav = gatherForMethod(db, controllerMethod, limit, includeInterfaceResolved);
             partial.fieldAssignments = methodNav.fieldAssignments;
             partial.fieldFlowsOut = methodNav.fieldFlowsOut;
             partial.validates = methodNav.validates;

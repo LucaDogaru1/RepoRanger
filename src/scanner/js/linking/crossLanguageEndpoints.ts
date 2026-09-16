@@ -1,13 +1,14 @@
 import { graph } from "../../../graph/graph";
-import { GraphEdge, GraphNode } from "../../../graph/GraphTypes";
 import {
-    canonicalEndpointId,
-    canonicalKeyFromEndpointId,
+    httpClientEndpointId,
+    normalizeEndpointPath,
     parseApiEndpointId,
+    parseHttpEndpointId,
 } from "../resolvers/endpointNormalizer";
 
 export interface CrossLanguageLinkStats {
     canonicalized: number;
+    /** Kept for CLI compatibility; endpoint identities are no longer merged. */
     merged: number;
     backendLinked: number;
 }
@@ -21,46 +22,8 @@ function hasRoutesTo(endpointId: string): boolean {
     return false;
 }
 
-function isJsDiscoveredEndpoint(endpointId: string): boolean {
-    for (const edge of graph.edges.values()) {
-        if (edge.to === endpointId && edge.type === "HTTP_REQUEST") {
-            return true;
-        }
-    }
-    return false;
-}
-
-function pickCanonicalEndpointId(ids: string[]): string {
-    const withBackendRoute = ids.find(hasRoutesTo);
-    if (withBackendRoute) {
-        return withBackendRoute;
-    }
-
-    const canonicalMatch = ids.find(id => {
-        const parsed = parseApiEndpointId(id);
-        return parsed && id === canonicalEndpointId(parsed.method, parsed.path);
-    });
-    if (canonicalMatch) {
-        return canonicalMatch;
-    }
-
-    return [...ids].sort()[0];
-}
-
-function mergeNodeMetadata(target: GraphNode, source: GraphNode): void {
-    const keywords = new Set([...(target.keywords ?? []), ...(source.keywords ?? [])]);
-    target.keywords = [...keywords];
-
-    if (!target.description && source.description) {
-        target.description = source.description;
-    }
-
-    if (!target.file && source.file) {
-        target.file = source.file;
-    }
-}
-
-function rebuildEdgeMap(edges: GraphEdge[]): void {
+function rebuildEdgeMap(): void {
+    const edges = [...graph.edges.values()];
     graph.edges.clear();
 
     for (const edge of edges) {
@@ -69,134 +32,127 @@ function rebuildEdgeMap(edges: GraphEdge[]): void {
     }
 }
 
-function retargetEndpointId(oldId: string, newId: string, recordAlias = true): void {
-    if (oldId === newId) {
-        return;
-    }
-
-    const oldNode = graph.nodes.get(oldId);
-    if (!oldNode) {
-        return;
-    }
-
-    const targetNode = graph.nodes.get(newId);
-    if (targetNode) {
-        mergeNodeMetadata(targetNode, oldNode);
-        graph.nodes.delete(oldId);
-    } else {
-        graph.nodes.delete(oldId);
-        oldNode.id = newId;
-        graph.nodes.set(newId, oldNode);
-    }
-
-    const updatedEdges = [...graph.edges.values()].map(edge => ({
-        ...edge,
-        from: edge.from === oldId ? newId : edge.from,
-        to: edge.to === oldId ? newId : edge.to,
-    }));
-
-    if (recordAlias) {
-        updatedEdges.push({
-            from: oldId,
-            to: newId,
-            type: "RESOLVES_TO",
-            reason: "Cross-language endpoint alias merged to canonical route node",
-            confidence: 1,
-        });
-    }
-
-    rebuildEdgeMap(updatedEdges);
-}
-
-function canonicalizeEndpointIds(): number {
+function canonicalizeHttpEndpointIds(): number {
     let canonicalized = 0;
 
     for (const [id, node] of [...graph.nodes.entries()]) {
-        if (node.type !== "api_endpoint") {
+        if (node.type !== "http_endpoint") {
             continue;
         }
 
-        const parsed = parseApiEndpointId(id);
+        const parsed = parseHttpEndpointId(id);
         if (!parsed) {
             continue;
         }
 
-        const nextId = canonicalEndpointId(parsed.method, parsed.path);
-        if (nextId === id) {
+        const canonicalId = httpClientEndpointId(parsed.method, parsed.path);
+        if (canonicalId === id) {
             continue;
         }
 
-        retargetEndpointId(id, nextId);
+        const existing = graph.nodes.get(canonicalId);
+        if (existing) {
+            existing.keywords = [...new Set([...(existing.keywords ?? []), ...(node.keywords ?? [])])];
+        } else {
+            node.id = canonicalId;
+            graph.nodes.set(canonicalId, node);
+        }
+        graph.nodes.delete(id);
+
+        for (const edge of graph.edges.values()) {
+            if (edge.from === id) edge.from = canonicalId;
+            if (edge.to === id) edge.to = canonicalId;
+        }
         canonicalized += 1;
     }
 
+    if (canonicalized > 0) {
+        rebuildEdgeMap();
+    }
     return canonicalized;
 }
 
-function mergeDuplicateEndpoints(): number {
-    const groups = new Map<string, string[]>();
+function stripConventionalApiPrefix(path: string): string {
+    const normalized = normalizeEndpointPath(path);
+    const withLeadingSlash = normalized.startsWith("/") ? normalized : `/${normalized}`;
+    return normalizeEndpointPath(
+        withLeadingSlash.replace(/^\/api(?:\/v\d+)?(?=\/|$)/i, "") || "/",
+    );
+}
 
-    for (const [id, node] of graph.nodes) {
-        if (node.type !== "api_endpoint") {
-            continue;
-        }
-
-        const key = canonicalKeyFromEndpointId(id);
-        if (!key) {
-            continue;
-        }
-
-        const bucket = groups.get(key) ?? [];
-        bucket.push(id);
-        groups.set(key, bucket);
+function endpointPathsMatch(clientPath: string, routePath: string): {
+    matches: boolean;
+    confidence: number;
+    reason: string;
+} {
+    const client = normalizeEndpointPath(clientPath).toLowerCase();
+    const route = normalizeEndpointPath(routePath).toLowerCase();
+    if (client === route) {
+        return { matches: true, confidence: 1, reason: "identical normalized endpoint path" };
     }
 
-    let merged = 0;
+    if (stripConventionalApiPrefix(client) === stripConventionalApiPrefix(route)) {
+        return {
+            matches: true,
+            confidence: 0.9,
+            reason: "endpoint paths match after conventional API/version prefix normalization",
+        };
+    }
 
-    for (const ids of groups.values()) {
-        if (ids.length <= 1) {
+    return { matches: false, confidence: 0, reason: "different endpoint paths" };
+}
+
+function linkHttpEndpointsToRoutes(): number {
+    const routes = [...graph.nodes.entries()]
+        .filter(([id, node]) => node.type === "api_endpoint" && hasRoutesTo(id))
+        .flatMap(([id]) => {
+            const parsed = parseApiEndpointId(id);
+            return parsed ? [{ id, ...parsed }] : [];
+        });
+
+    let linked = 0;
+    for (const [clientId, node] of graph.nodes) {
+        if (node.type !== "http_endpoint") {
             continue;
         }
 
-        const canonicalId = pickCanonicalEndpointId(ids);
+        const client = parseHttpEndpointId(clientId);
+        if (!client) {
+            continue;
+        }
 
-        for (const aliasId of ids) {
-            if (aliasId === canonicalId) {
+        for (const route of routes) {
+            if (route.method !== client.method) {
                 continue;
             }
 
-            retargetEndpointId(aliasId, canonicalId);
-            merged += 1;
+            const pathMatch = endpointPathsMatch(client.path, route.path);
+            if (!pathMatch.matches) {
+                continue;
+            }
+
+            graph.edges.set(`${clientId}->${route.id}:RESOLVES_TO`, {
+                from: clientId,
+                to: route.id,
+                type: "RESOLVES_TO",
+                confidence: pathMatch.confidence,
+                reason: `HTTP client request resolves to backend route: ${pathMatch.reason}`,
+            });
+            linked += 1;
         }
     }
 
-    return merged;
-}
-
-function countBackendLinkedEndpoints(): number {
-    let count = 0;
-
-    for (const [id, node] of graph.nodes) {
-        if (node.type !== "api_endpoint") {
-            continue;
-        }
-
-        if (hasRoutesTo(id) && isJsDiscoveredEndpoint(id)) {
-            count += 1;
-        }
-    }
-
-    return count;
+    return linked;
 }
 
 /**
- * Unify JS fetch() endpoints with PHP Route::… nodes already in the graph.
- * Runs after the JS walk when scan.ts processes PHP first, then JS.
+ * Link frontend HTTP requests to backend routes without collapsing their nodes.
+ * A request site and a route provider have different files, runtimes and roles;
+ * RESOLVES_TO preserves that distinction while keeping navigation connected.
  */
 export function linkCrossLanguageEndpoints(): CrossLanguageLinkStats {
-    const canonicalized = canonicalizeEndpointIds();
-    const merged = mergeDuplicateEndpoints();
-    const backendLinked = countBackendLinkedEndpoints();
+    const canonicalized = canonicalizeHttpEndpointIds();
+    const backendLinked = linkHttpEndpointsToRoutes();
 
-    return { canonicalized, merged, backendLinked };
+    return { canonicalized, merged: 0, backendLinked };
 }

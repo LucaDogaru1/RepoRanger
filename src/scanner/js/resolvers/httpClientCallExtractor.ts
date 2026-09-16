@@ -1,5 +1,5 @@
 import Parser from "tree-sitter";
-import { endpointNodeId } from "../../php/routes/endpointId";
+import { httpClientEndpointId } from "./endpointNormalizer";
 import { graph } from "../../../graph/graph";
 import { JsWalkContext } from "../walk/context";
 import { resolveHttpResourceChain } from "./httpResourceRegistry";
@@ -198,12 +198,12 @@ export function recordHttpClientEndpoint(
         return false;
     }
 
-    const endpointId = endpointNodeId(endpoint.method, endpoint.path);
+    const endpointId = httpClientEndpointId(endpoint.method, endpoint.path);
     const label = `${endpoint.method} ${endpoint.path}`;
 
     graph.nodes.set(endpointId, {
         id: endpointId,
-        type: "api_endpoint",
+        type: "http_endpoint",
         name: label,
         file: context.file,
         keywords: [

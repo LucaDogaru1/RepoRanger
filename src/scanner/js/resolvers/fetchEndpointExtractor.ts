@@ -1,5 +1,5 @@
 import Parser from "tree-sitter";
-import { canonicalEndpointId } from "./endpointNormalizer";
+import { httpClientEndpointId } from "./endpointNormalizer";
 import { JsWalkContext } from "../walk/context";
 
 export interface FetchEndpoint {
@@ -182,5 +182,5 @@ export function isDirectFetchCallee(name: string): boolean {
 }
 
 export function fetchEndpointNodeId(endpoint: FetchEndpoint): string {
-    return canonicalEndpointId(endpoint.method, endpoint.path);
+    return httpClientEndpointId(endpoint.method, endpoint.path);
 }

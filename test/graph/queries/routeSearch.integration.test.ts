@@ -38,12 +38,36 @@ INSERT INTO nodes VALUES
   ('api:GET:contents/helpers', NULL, 'api_endpoint', 'GET helpers', 'apps/spott-frontend/helpers.js', NULL, NULL);
 `);
 
+db.exec(`
+INSERT INTO nodes VALUES
+  ('api:GET:/contents/{param}', NULL, 'api_endpoint', 'GET contents', 'apps/api/routes/api.v3.php', NULL, NULL),
+  ('api:GET:/baseConfigEventContents/{param}', NULL, 'api_endpoint', 'GET backend content', 'apps/admin/routes/api.php', NULL, NULL),
+  ('http:GET:/api/v3/contents/{param}', NULL, 'http_endpoint', 'GET contents request', 'packages/sdk/useContent.ts', NULL, NULL);
+`);
+
 function topRoute(query: string): string | undefined {
     return searchNodes(db, query, { kind: "route" })[0]?.id;
 }
 
 assert.equal(topRoute("GET /api/v3/config/settings"), "api:GET:config/settings");
 assert.equal(topRoute("api:GET:/api/v3/config/settings"), "api:GET:config/settings");
+
+const contentRouteMatches = searchNodes(db, "GET /api/v3/contents/{contentId}", { kind: "route" });
+assert.equal(
+    contentRouteMatches[0]?.id,
+    "api:GET:/contents/{param}",
+    "route provider outranks the exact client URL and substring-similar routes",
+);
+assert.equal(
+    topRoute("http:GET:/api/v3/contents/{param}"),
+    "http:GET:/api/v3/contents/{param}",
+    "an exact HTTP client endpoint identity remains directly searchable",
+);
+assert.ok(
+    contentRouteMatches.findIndex(match => match.id === "api:GET:/baseConfigEventContents/{param}")
+        > contentRouteMatches.findIndex(match => match.id === "api:GET:/contents/{param}"),
+    "a static substring does not behave like a route segment",
+);
 
 const multiviewTop = searchNodes(db, "GET /api/v3/contents/{contentId}/multiview", { kind: "route" });
 assert.equal(multiviewTop[0]?.id, "api:GET:contents/{param}/multiview");

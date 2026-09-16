@@ -1,8 +1,10 @@
 import Database from "better-sqlite3";
 import {
     buildRouteSearchPlan,
+    candidateRoutePaths,
     isLowSignalRouteFile,
     isProductionRouteFile,
+    routePathsStructurallyEqual,
     ROUTE_SEARCH_LIMITS,
     type RouteSearchPlan,
 } from "./routeSearchVariants";
@@ -214,7 +216,7 @@ function detectKind(query: string, explicit?: SearchKind): SearchKind {
     }
 
     const lower = query.toLowerCase();
-    if (query.startsWith("api:") || /^(get|post|put|patch|delete)\s+\//i.test(query)) {
+    if (/^(?:api|http):/.test(query) || /^(get|post|put|patch|delete|head|options)\s+\//i.test(query)) {
         return "route";
     }
     if (query.startsWith("request_field:") || query.startsWith("model_field:")) {
@@ -223,7 +225,7 @@ function detectKind(query: string, explicit?: SearchKind): SearchKind {
     if (query.startsWith("config_key:")) {
         return "config";
     }
-    if (lower.includes("/") && /\b(get|post|put|patch|delete)\b/i.test(query)) {
+    if (lower.includes("/") && /\b(get|post|put|patch|delete|head|options)\b/i.test(query)) {
         return "route";
     }
     return "symbol";
@@ -234,7 +236,7 @@ function typesForKind(kind: SearchKind): string[] | null {
         case "symbol":
             return [...SYMBOL_TYPES];
         case "route":
-            return ["api_endpoint", "route_name"];
+            return ["api_endpoint", "http_endpoint", "route_name"];
         case "field":
             return [...FIELD_TYPES];
         case "config":
@@ -363,20 +365,13 @@ function scoreMatchAgainstVariants(
     return best;
 }
 
-function routePathFromId(id: string): string {
-    const colon = id.indexOf(":", 4);
-    if (id.startsWith("api:") && colon > 0) {
-        return id.slice(colon + 1);
-    }
-    return id;
-}
-
 function routeVerbFromId(id: string): string | null {
-    if (!id.startsWith("api:")) {
+    const prefixLength = id.startsWith("http:") ? 5 : 4;
+    if (!id.startsWith("api:") && !id.startsWith("http:")) {
         return null;
     }
 
-    const colon = id.indexOf(":", 4);
+    const colon = id.indexOf(":", prefixLength);
     if (colon <= 0) {
         return null;
     }
@@ -384,16 +379,10 @@ function routeVerbFromId(id: string): string | null {
     return id.slice(4, colon).toUpperCase();
 }
 
-function matchesNormalizedPath(id: string, normalizedPaths: string[]): boolean {
-    const routePath = routePathFromId(id);
-    const lowerRoutePath = routePath.toLowerCase();
-
-    return normalizedPaths.some(path => {
-        const lowerPath = path.toLowerCase();
-        return lowerRoutePath === lowerPath
-            || lowerRoutePath.endsWith(`:${lowerPath}`)
-            || lowerRoutePath.endsWith(lowerPath);
-    });
+function matchesNormalizedPath(id: string, file: string | null, normalizedPaths: string[]): boolean {
+    return candidateRoutePaths(id, file).some(candidate =>
+        normalizedPaths.some(path => routePathsStructurallyEqual(candidate, path))
+    );
 }
 
 function applyVerbScoring(
@@ -441,6 +430,10 @@ function scoreRouteMatch(
     row: NodeRow,
     plan: RouteSearchPlan,
 ): { score: number; matchReason: string } {
+    if (plan.explicitEndpointId === row.id) {
+        return applyFileScoring(row.file, 2500, "explicit endpoint id");
+    }
+
     if (plan.exactIds.includes(row.id)) {
         const exact = applyFileScoring(row.file, 1500, "exact route id");
         const withVerb = applyVerbScoring(row.id, exact.score, plan.verb);
@@ -456,19 +449,35 @@ function scoreRouteMatch(
     let score = 0;
     let matchReason = "weak match";
 
-    if (plan.verb && id.toUpperCase().startsWith(`API:${plan.verb}:`) && matchesNormalizedPath(id, plan.normalizedPaths)) {
+    const matchesPublicPath = matchesNormalizedPath(id, row.file, plan.requestedPaths);
+    const matchesFrameworkPath = matchesNormalizedPath(id, row.file, plan.normalizedPaths);
+
+    if (plan.verb && id.toUpperCase().startsWith(`API:${plan.verb}:`) && matchesPublicPath) {
+        score = 1450;
+        matchReason = "matching HTTP verb and structural public path";
+    } else if (matchesPublicPath) {
+        score = 1250;
+        matchReason = "structural public path match";
+    } else if (plan.verb && id.toUpperCase().startsWith(`API:${plan.verb}:`) && matchesFrameworkPath) {
         score = 1400;
-        matchReason = "matching HTTP verb and full route path";
-    } else if (matchesNormalizedPath(id, plan.normalizedPaths)) {
+        matchReason = "matching HTTP verb and structural framework path";
+    } else if (matchesFrameworkPath) {
         score = 1200;
-        matchReason = "full route path match";
+        matchReason = "structural framework path match";
     } else {
+        const routeSegments = candidateRoutePaths(id, row.file)
+            .map(path => path.split("/").filter(Boolean));
         for (const path of plan.normalizedPaths) {
-            const lowerPath = path.toLowerCase();
-            const routePath = routePathFromId(id).toLowerCase();
-            if (routePath.endsWith(lowerPath) || routePath.endsWith(`/${lowerPath}`)) {
-                score = 1000;
-                matchReason = "route path suffix match";
+            const querySegments = path.split("/").filter(Boolean);
+            if (routeSegments.some(segments =>
+                segments.length > querySegments.length
+                && routePathsStructurallyEqual(
+                    segments.slice(-querySegments.length).join("/"),
+                    querySegments.join("/"),
+                )
+            )) {
+                score = 900;
+                matchReason = "route segment suffix match";
                 break;
             }
         }
@@ -510,7 +519,7 @@ function fetchRouteRowsByPatterns(
         const batch = db.prepare(`
             SELECT id, type, name, file
             FROM nodes
-            WHERE type IN ('api_endpoint', 'route_name')
+            WHERE type IN ('api_endpoint', 'http_endpoint', 'route_name')
               AND id LIKE ? ESCAPE '\\'
             ORDER BY id ASC
             LIMIT ?

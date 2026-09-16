@@ -105,7 +105,12 @@ function findOutboundHttpBridges(
 }
 
 function compactLabel(nodeId: string): string {
-    if (nodeId.startsWith("api:") || nodeId.startsWith("request_field:") || nodeId.startsWith("model_field:")) {
+    if (
+        nodeId.startsWith("api:")
+        || nodeId.startsWith("http:")
+        || nodeId.startsWith("request_field:")
+        || nodeId.startsWith("model_field:")
+    ) {
         return shortNavigationLabel(nodeId);
     }
 
@@ -302,7 +307,12 @@ export function buildLocate(
     if (!traceResult.ok) return traceResult;
 
     const trace = traceResult.data;
-    const entryNode = trace.target.type === "api_endpoint" ? trace.target : null;
+    const routeEntryId = trace.navigation.routeEntries[0]?.endpointId;
+    const entryNode = routeEntryId
+        ? findNode(db, routeEntryId)
+        : trace.target.type === "api_endpoint"
+            ? trace.target
+            : null;
     const middleware = entryNode ? findRouteMiddleware(db, entryNode.id) : [];
     const entryLocation = entryNode && !(httpBridge && entryNode.file === matchedNode.file)
         ? compactLocation(entryNode)
