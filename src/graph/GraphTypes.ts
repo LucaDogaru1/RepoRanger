@@ -1,4 +1,5 @@
 import Parser from "tree-sitter";
+import type { CodeRuntime } from "../shared/classification/codeLocation";
 
 export interface GraphEdge {
     from: string;
@@ -29,6 +30,13 @@ export interface GraphNode {
     keywords?: string[];
     description?: string;
     dataType?: string;
+    workspace?: string;
+    packageName?: string;
+    runtime?: CodeRuntime;
+    runtimeConfidence?: number;
+    runtimeReasons?: string[];
+    sources?: string[];
+    scopeDirectory?: string;
 }
 
 export interface Graph {

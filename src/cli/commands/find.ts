@@ -5,6 +5,7 @@ import { suggestFollowUpQueries } from "../../graph/queries/searchQueryVariants"
 import { suggestRouteFollowUpQueries } from "../../graph/queries/routeSearchVariants";
 import { shortNavigationLabel } from "../../graph/queries/navigationQueries";
 import { getIntOption, getOptionValue, hasFlag } from "../shared/cliArgs";
+import type { CodeRuntime } from "../../shared/classification/codeLocation";
 
 const dbPath = process.argv[2];
 const query = process.argv[3];
@@ -14,19 +15,48 @@ const kind = (getOptionValue(args, "--kind") ?? "auto") as SearchKind;
 const limit = getIntOption(args, "--limit", 20, 1);
 const jsonOutput = hasFlag(args, "--json");
 const outputPath = getOptionValue(args, "--output");
+const runtimeArg = getOptionValue(args, "--runtime");
+const workspace = getOptionValue(args, "--workspace");
+const supportedRuntimes = new Set<CodeRuntime>([
+    "legacy-vue",
+    "nuxt",
+    "vue",
+    "shared",
+    "backend",
+    "unknown",
+]);
+const runtime = runtimeArg && supportedRuntimes.has(runtimeArg as CodeRuntime)
+    ? runtimeArg as CodeRuntime
+    : undefined;
+const autoRouteQuery = kind === "auto" && (
+    query?.startsWith("api:")
+    || /^(get|post|put|patch|delete)\s+\//i.test(query ?? "")
+);
+const dedupeByFile = kind !== "route" && !autoRouteQuery && !hasFlag(args, "--no-dedupe");
 
 if (!dbPath || !query) {
-    console.log(`Usage: repo-ranger find <db.sqlite> "<query>" [--kind=auto|symbol|route|field|config|all] [--limit=20] [--json] [--output=file.txt]`);
+    console.log(`Usage: repo-ranger find <db.sqlite> "<query>" [--kind=auto|symbol|route|field|config|all] [--runtime=nuxt|legacy-vue|vue|shared|backend|unknown] [--workspace=name] [--no-dedupe] [--limit=20] [--json] [--output=file.txt]`);
+    process.exit(2);
+}
+
+if (runtimeArg && !runtime) {
+    console.error(`Unsupported runtime "${runtimeArg}". Use nuxt, legacy-vue, vue, shared, backend, or unknown.`);
     process.exit(2);
 }
 
 const db = new Database(dbPath);
 
 try {
-    const matches = searchNodes(db, query, { kind, limit });
+    const matches = searchNodes(db, query, {
+        kind,
+        limit,
+        runtime,
+        workspace,
+        dedupeByFile,
+    });
 
     if (jsonOutput) {
-        const payload = { query, kind, limit, matches };
+        const payload = { query, kind, runtime: runtime ?? null, workspace: workspace ?? null, dedupeByFile, limit, matches };
         const json = JSON.stringify(payload, null, 2);
         console.log(json);
         if (outputPath) {
@@ -67,6 +97,9 @@ try {
         `# Find: ${query}`,
         "",
         `- kind: ${kind}`,
+        `- runtime: ${runtime ?? "all"}`,
+        `- workspace: ${workspace ?? "all"}`,
+        `- dedupe by file: ${dedupeByFile}`,
         `- matches: ${matches.length}`,
         "",
         "## Results",
@@ -77,6 +110,10 @@ try {
         lines.push(`- **${match.id}** (${match.type}) — score ${match.score}, ${match.matchReason}`);
         if (match.file) {
             lines.push(`  file: ${match.file}`);
+        }
+        lines.push(`  scope: ${match.workspace ?? "unknown"} / ${match.runtime ?? "unknown"} (${(match.runtimeConfidence ?? 0).toFixed(2)})`);
+        if ((match.groupedNodeCount ?? 1) > 1) {
+            lines.push(`  grouped: ${match.groupedNodeCount} nodes [${(match.groupedNodeTypes ?? []).join(", ")}]`);
         }
         lines.push(`  label: ${shortNavigationLabel(match.id)}`);
     }

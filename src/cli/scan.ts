@@ -83,6 +83,23 @@ if (language === "js" || language === "both") {
         const prefix = pathPrefixForRoot(rootDir);
         const scanConfig = loadScanConfig(rootDir, prefix);
 
+        for (const scope of scanConfig.projectScopes ?? []) {
+            const scopeId = `project_scope:${scope.directory || path.basename(rootDir)}`;
+            graph.nodes.set(scopeId, {
+                id: scopeId,
+                type: "project_scope",
+                name: scope.workspace,
+                workspace: scope.workspace,
+                packageName: scope.packageName,
+                runtime: scope.runtime,
+                runtimeConfidence: scope.confidence,
+                runtimeReasons: scope.reasons,
+                sources: scope.sources,
+                scopeDirectory: scope.directory,
+                description: `${scope.runtime} project scope (${scope.confidence.toFixed(2)} confidence)`,
+            });
+        }
+
         if (scanConfig.pathAliases && Object.keys(scanConfig.pathAliases).length > 0) {
             console.log(`scan config (${rootDir}): explicit path aliases loaded`);
         }

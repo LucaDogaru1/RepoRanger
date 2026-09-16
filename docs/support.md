@@ -16,7 +16,7 @@ Use `--lang=both` to scan PHP and JS/Vue/Nuxt in one run (typical for Laravel + 
 **Cross-language linking** (UI → HTTP → controller) is supported when:
 
 - PHP route nodes exist in the graph, and
-- JS resolves imports (often needs `repo-ranger.config.json` for `@/` aliases), and
+- JS resolves imports (standard TypeScript, Nuxt, Vite, and webpack aliases are auto-detected), and
 - HTTP calls match known patterns (`fetch`, `$fetch`, `useFetch`, registry-based API clients, etc.)
 
 See [config-setup.md](config-setup.md) for copy-paste examples, or [scan-config.md](scan-config.md) for the full reference.
@@ -38,6 +38,7 @@ Tuned for **Laravel**-shaped backends. Other PHP frameworks may scan, but route 
 
 - ES modules, imports, exports, function and class declarations
 - Vue single-file components (Options API and partial Composition / `<script setup>`)
+- Imported child components, `<component :is="...">`, and statically detectable component registries
 - `.ts` files and Vue `<script lang="ts">` via **tree-sitter-typescript** (strip + JS parser is fallback only)
 - Global `fetch()`, Nuxt `$fetch` / `useFetch`, and registry-style HTTP helpers when patterns are recognized
 - Cross-language `HTTP_REQUEST` edges to PHP routes when resolvable
@@ -49,13 +50,14 @@ Nuxt monorepos are supported under `--lang=js` (same flag as JS/Vue). Tested on 
 **Works well today**
 
 - TypeScript composables and `.vue` SFCs (`<script setup lang="ts">`)
-- Package-scoped import aliases (`@core/`, `@content/`, etc.) via `repo-ranger.config.json` — see [config-setup.md](config-setup.md)
+- Package-scoped import aliases (`@core/`, `@content/`, etc.) from Nuxt/TypeScript configuration; `repo-ranger.config.json` remains an override — see [config-setup.md](config-setup.md)
 - `$fetch` / `useFetch` when the URL contains an `api/v…` path (string literals, template literals, or `computed(() => \`…\`)` via `unref(url)` / `url.value`)
 - Import and call graph across packages
 
 **Known gaps**
 
 - Pug templates
+- Registries assembled through runtime mutation, plugin hooks, or computed keys
 - Nitro `server/api/` routes (server-side handlers not scanned as routes)
 - `lang="tsx"` in Vue SFCs (falls back to strip + JS parser)
 - Fully dynamic URLs with no `api/v…` segment in source

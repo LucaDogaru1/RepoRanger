@@ -50,9 +50,23 @@ SlidePresetsController::index
 | `js_module` | JS/Vue file module |
 | `vue_component` | Vue component (SFC or defineComponent) |
 | `vue_prop` | Declared component prop |
+| `dynamic_component` | A Vue `<component :is="...">` binding |
+| `component_registry` | Map that registers component implementations by key |
+| `registry_entry` | One key in a component registry |
 | `method` | Function or Vue option method (incl. `setup`) |
 | `api_endpoint` | Inferred HTTP path (fetch or HTTP client) |
 | `external_api_call` | Browser/runtime API (not project code) |
+
+### Project structure
+
+| Type | Description |
+|---|---|
+| `project_scope` | Auto-detected workspace/runtime boundary from package and build configuration |
+
+Project scopes record a workspace path, runtime (`legacy-vue`, `nuxt`, `vue`,
+`shared`, `backend`, or `unknown`), confidence, evidence, and configuration
+sources. `find` uses the nearest scope plus strong path signals such as
+`resources/assets/js` to classify and filter results.
 
 ## Edge types
 
@@ -77,6 +91,11 @@ SlidePresetsController::index
 | `HTTP_REQUEST` | Client call → `api_endpoint` |
 | `CALLS` | Local or imported function call |
 | `PASSES_PROP` / `DECLARES_PROP` | Template → prop flow |
+| `RENDERS_COMPONENT` | Vue template/dynamic binding → rendered component module |
+| `RENDERS_DYNAMIC` | Vue component → `<component :is>` binding |
+| `DECLARES_REGISTRY` | Module → component registry |
+| `REGISTERED_AS` | Registry key → registered component module |
+| `RESOLVES_VIA_REGISTRY` | Dynamic component binding → registry |
 | `EXTERNAL_API_CALL` | Runtime API usage |
 
 Cross-language linking merges JS `api_endpoint` nodes with PHP routes when paths align.
@@ -95,3 +114,5 @@ Cross-language linking merges JS `api_endpoint` nodes with PHP routes when paths
 | Dead code | Methods without incoming usage |
 | Architecture | Layer direction on dependencies |
 | Hotspots / risk | Connection density |
+| Feature / context | File clustering, runtime filtering, registries, and bounded task context |
+| Similar | Deterministic file-shape and graph-neighborhood comparison |

@@ -14,6 +14,18 @@ const COMMANDS: Record<string, CommandDef> = {
         script: "commands/find.ts",
         description: "Search graph symbols, routes, and fields (alias: analyze:find)",
     },
+    feature: {
+        script: "commands/feature.ts",
+        description: "Cluster relevant files around a feature or domain term",
+    },
+    context: {
+        script: "commands/context.ts",
+        description: "Task-oriented code context with a fixed token budget",
+    },
+    similar: {
+        script: "commands/similar.ts",
+        description: "Find structurally similar implementations",
+    },
     "analyze:find": {
         script: "commands/find.ts",
         description: "Same as find",
@@ -134,6 +146,8 @@ function printHelp(): void {
 Examples:
   repo-ranger scan /path/to/repo --lang=both --output=both
   repo-ranger find sqlite/Graph.sqlite PaymentController
+  repo-ranger feature sqlite/Graph.sqlite "Page Manager" --runtime=nuxt
+  repo-ranger context sqlite/Graph.sqlite "add callout module" --max-tokens=2500
   repo-ranger locate sqlite/Graph.sqlite "GET /api/v3/contents"
   repo-ranger trace sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar"
   repo-ranger ai-context sqlite/Graph.sqlite "App\\\\Services\\\\Foo::bar" --compact

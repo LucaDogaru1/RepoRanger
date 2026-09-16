@@ -383,6 +383,8 @@ Examples:
 repo-ranger find sqlite/Graph.sqlite PaymentController
 repo-ranger find sqlite/Graph.sqlite "POST /payments" --kind=route
 repo-ranger find sqlite/Graph.sqlite providerCategory --kind=field
+repo-ranger find sqlite/Graph.sqlite useModule --runtime=nuxt
+repo-ranger find sqlite/Graph.sqlite Callout --workspace=spott-backend
 ```
 
 Options:
@@ -390,9 +392,72 @@ Options:
 | Option | Default | Description |
 |---|---|---|
 | `--kind=auto\|symbol\|route\|field\|config\|all` | `auto` | Restrict result types |
+| `--runtime=nuxt\|legacy-vue\|vue\|shared\|backend\|unknown` | all | Restrict results to an inferred runtime |
+| `--workspace=<name>` | all | Restrict results to a workspace path or its final name |
+| `--no-dedupe` | off | Show every matching graph node instead of one logical result per file |
 | `--limit=N` | `20` | Max results |
 
+Non-route searches are deduplicated by file by default. Each result reports its
+workspace, inferred runtime, confidence, grouped node count, and grouped node
+types. Route searches remain endpoint-based and are not deduplicated by file.
+
 Use the returned graph id with `trace`, `ai-context`, or `change-impact`.
+
+---
+
+## Feature
+
+Purpose: group the most relevant files around a feature or domain phrase. The
+result combines lexical matches, direct graph neighbors, workspace/runtime
+classification, and deterministic structural similarity.
+
+```bash
+repo-ranger feature sqlite/Graph.sqlite "Page Manager" --runtime=legacy-vue
+repo-ranger feature sqlite/Graph.sqlite "Callout Section" --runtime=nuxt --files=15
+```
+
+Options: `--runtime`, `--workspace`, `--files=N`, `--json`, and `--output=<file>`.
+
+---
+
+## Context
+
+Purpose: turn a ticket-like phrase into a bounded navigation packet containing
+prioritized files, likely workspaces, entry points, registries, tests, structural
+neighbors, cross-stack links, and explicit coverage gaps.
+
+```bash
+repo-ranger context sqlite/Graph.sqlite "add Callout Section module" \
+  --runtime=nuxt --max-tokens=2500
+```
+
+Options:
+
+| Option | Default | Description |
+|---|---|---|
+| `--max-tokens=N` | `2500` | Approximate hard output budget (minimum 200) |
+| `--runtime=...` | all | Restrict the inferred runtime |
+| `--workspace=<name>` | all | Restrict the workspace |
+| `--files=N` | `20` | Maximum prioritized files, capped at 20 |
+| `--json` | off | Emit compact structured output |
+| `--output=<file>` | — | Write the result to a file |
+
+The token estimate uses a conservative four-characters-per-token approximation.
+It is deterministic and requires no model or external API.
+
+---
+
+## Similar
+
+Purpose: find structurally related implementations using graph shape, symbols,
+path terms, roles, runtime, workspace, and direct graph connections.
+
+```bash
+repo-ranger similar sqlite/Graph.sqlite CalloutSection --runtime=nuxt --limit=10
+```
+
+This is local graph similarity, not embedding search. It is explainable and has
+no network or token cost.
 
 ---
 

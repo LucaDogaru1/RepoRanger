@@ -124,6 +124,9 @@ Expected chain: **route → controller → service → query methods** (when the
 |---------|---------|
 | `scan` | Build `Graph.sqlite` / `Graph.json` |
 | `find` | Search symbols, routes, fields (`--kind=route\|symbol\|field\|auto`) |
+| `feature` | Group files around a feature/domain term |
+| `context` | Task-oriented navigation context with a fixed token budget |
+| `similar` | Deterministic structural similarity search |
 | `locate` | Best match, compact flow, coverage, and up to five files |
 | `trace` | End-to-end flow + coverage for one symbol |
 | `ai-context` | Compact report: callers, callees, navigation, risk |
@@ -146,8 +149,9 @@ Full option reference: [`docs/commands.md`](docs/commands.md)
 - PHP classes, methods, traits, interfaces, enums
 - Laravel routes (`ROUTES_TO` → controller methods) and route middleware (`USES_MIDDLEWARE`)
 - `CALLS`, `DEPENDS_ON`, field flow (`FLOWS_TO`, `ARGUMENT_TO`), Blade/Vue links
-- JavaScript / TypeScript modules and Vue components
+- JavaScript / TypeScript modules, Vue components, dynamic components, and registries
 - Frontend → backend `HTTP_REQUEST` edges (when detectable)
+- Workspace/runtime boundaries for legacy Vue, Nuxt, shared packages, and backend code
 
 Not covered: full DI container resolution, runtime `app()` bindings, every fluent chain edge. See [`docs/support.md`](docs/support.md).
 

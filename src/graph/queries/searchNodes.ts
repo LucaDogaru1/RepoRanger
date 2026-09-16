@@ -11,6 +11,11 @@ import {
     type QueryVariant,
     VARIANT_SCORE_BONUS,
 } from "./searchQueryVariants";
+import {
+    classifyCodeLocation,
+    type CodeRuntime,
+    type ProjectScope,
+} from "../../shared/classification/codeLocation";
 
 type SQLiteDatabase = InstanceType<typeof Database>;
 
@@ -23,11 +28,20 @@ export interface SearchMatch {
     file: string | null;
     score: number;
     matchReason: string;
+    workspace?: string | null;
+    runtime?: CodeRuntime;
+    runtimeConfidence?: number;
+    runtimeReasons?: string[];
+    groupedNodeCount?: number;
+    groupedNodeTypes?: string[];
 }
 
 export interface SearchOptions {
     kind?: SearchKind;
     limit?: number;
+    runtime?: CodeRuntime;
+    workspace?: string;
+    dedupeByFile?: boolean;
 }
 
 type NodeRow = {
@@ -55,6 +69,8 @@ const FILE_REPRESENTATIVE_TYPES = new Set([
     "vue_component",
     "blade_view",
 ]);
+
+const projectScopeCache = new WeakMap<object, ProjectScope[]>();
 
 const SYMBOL_TYPES = new Set([
     "class",
@@ -95,6 +111,101 @@ function fileNameParts(file: string): { baseName: string; stem: string } {
     );
     const stem = extension ? baseName.slice(0, -extension.length) : baseName;
     return { baseName, stem };
+}
+
+export function loadProjectScopes(db: SQLiteDatabase): ProjectScope[] {
+    const cached = projectScopeCache.get(db);
+    if (cached) {
+        return cached;
+    }
+
+    const columns = db.prepare("PRAGMA table_info(nodes)").all() as Array<{ name: string }>;
+    if (!columns.some(column => column.name === "raw_json")) {
+        projectScopeCache.set(db, []);
+        return [];
+    }
+
+    const rows = db.prepare(`
+        SELECT raw_json
+        FROM nodes
+        WHERE type = 'project_scope'
+        ORDER BY id ASC
+    `).all() as Array<{ raw_json: string }>;
+
+    const scopes: ProjectScope[] = [];
+    for (const row of rows) {
+        try {
+            const parsed = JSON.parse(row.raw_json) as {
+                workspace?: string;
+                packageName?: string;
+                runtime?: CodeRuntime;
+                runtimeConfidence?: number;
+                runtimeReasons?: string[];
+                sources?: string[];
+                scopeDirectory?: string;
+                id?: string;
+            };
+            if (!parsed.workspace || !parsed.runtime || !parsed.id?.startsWith("project_scope:")) {
+                continue;
+            }
+            scopes.push({
+                directory: parsed.scopeDirectory ?? parsed.id.slice("project_scope:".length).replace(/^\.$/, ""),
+                workspace: parsed.workspace,
+                packageName: parsed.packageName,
+                runtime: parsed.runtime,
+                confidence: parsed.runtimeConfidence ?? 0,
+                reasons: parsed.runtimeReasons ?? [],
+                sources: parsed.sources ?? [],
+            });
+        } catch {
+            continue;
+        }
+    }
+
+    scopes.sort((left, right) => right.directory.length - left.directory.length);
+    projectScopeCache.set(db, scopes);
+    return scopes;
+}
+
+function workspaceMatches(actual: string | null, requested: string): boolean {
+    if (!actual) {
+        return false;
+    }
+    const normalizedActual = normalizeSearchPath(actual).toLowerCase();
+    const normalizedRequested = normalizeSearchPath(requested).toLowerCase();
+    return normalizedActual === normalizedRequested
+        || normalizedActual.endsWith(`/${normalizedRequested}`);
+}
+
+function classifyMatch(row: SearchMatch, scopes: ProjectScope[]): SearchMatch {
+    const classification = classifyCodeLocation(row.file, scopes);
+    return {
+        ...row,
+        workspace: classification.workspace,
+        runtime: classification.runtime,
+        runtimeConfidence: classification.confidence,
+        runtimeReasons: classification.reasons,
+        groupedNodeCount: 1,
+        groupedNodeTypes: [row.type],
+    };
+}
+
+function dedupeMatchesByFile(matches: SearchMatch[]): SearchMatch[] {
+    const grouped = new Map<string, SearchMatch>();
+    for (const match of matches) {
+        const key = match.file ? `file:${normalizeSearchPath(match.file).toLowerCase()}` : `id:${match.id}`;
+        const existing = grouped.get(key);
+        if (!existing) {
+            grouped.set(key, match);
+            continue;
+        }
+        existing.groupedNodeCount = (existing.groupedNodeCount ?? 1) + 1;
+        existing.groupedNodeTypes = [...new Set([
+            ...(existing.groupedNodeTypes ?? [existing.type]),
+            match.type,
+        ])];
+    }
+    return [...grouped.values()];
 }
 
 function detectKind(query: string, explicit?: SearchKind): SearchKind {
@@ -626,19 +737,22 @@ function runSearch(
         .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
 
     const seen = new Set<string>();
-    const result: SearchMatch[] = [];
+    const unique: SearchMatch[] = [];
     for (const row of scored) {
         if (seen.has(row.id)) {
             continue;
         }
         seen.add(row.id);
-        result.push(row);
-        if (result.length >= limit) {
-            break;
-        }
+        unique.push(row);
     }
 
-    return result;
+    const scopes = loadProjectScopes(db);
+    const classified = unique
+        .map(row => classifyMatch(row, scopes))
+        .filter(row => !options?.runtime || row.runtime === options.runtime)
+        .filter(row => !options?.workspace || workspaceMatches(row.workspace ?? null, options.workspace));
+    const grouped = options?.dedupeByFile ? dedupeMatchesByFile(classified) : classified;
+    return grouped.slice(0, limit);
 }
 
 export function searchNodes(

@@ -1,6 +1,17 @@
 # Config setup
 
-RepoRanger needs **one file in your project** for accurate JS/Vue/Nuxt graphs: `repo-ranger.config.json` at the **scan root** (the folder you pass to `scan`, not inside the RepoRanger package).
+RepoRanger automatically discovers static path aliases from:
+
+- `tsconfig.json` and `jsconfig.json` (`baseUrl`, `paths`, and relative `extends`);
+- `nuxt.config.js|ts|mjs|cjs` (`alias`, `srcDir`, and Nuxt's `@`, `~`, `@@`, `~~` defaults);
+- `vite.config.js|ts|mjs|cjs` (`resolve.alias`);
+- `webpack.config.js|ts|mjs|cjs` (`resolve.alias`).
+
+In monorepos, aliases are scoped to the nearest app/package configuration. Two
+apps can therefore use `@/` for different directories without colliding.
+
+Use `repo-ranger.config.json` at the **scan root** only as an override for
+dynamic, plugin-generated, or otherwise non-standard aliases:
 
 ```text
 your-repo/
@@ -10,19 +21,23 @@ your-repo/
 └── ...
 ```
 
-Also accepted: `.repo-ranger.json` in the same folder.
+Also accepted: `.repo-ranger.json` in the same folder. Explicit aliases always
+win over auto-detected aliases.
 
-**When you need this:** any project that uses import aliases (`@/`, `@core/`, `~`, etc.). Relative imports (`../../api`) work without config.
+**When you need this:** RepoRanger reports unresolved aliases, the build config
+computes aliases dynamically, or you deliberately want to override the project configuration.
 
-**When you skip it:** PHP-only scans, or JS with no path aliases.
+**When you skip it:** standard Nuxt, Vue/Vite, webpack, and TypeScript projects,
+PHP-only scans, or JS projects with no path aliases.
 
 After creating the file:
 
 ```bash
-npx repo-ranger scan /path/to/your-repo --lang=both --output=both
+repo-ranger scan /path/to/your-repo --lang=both --output=both
 ```
 
-The CLI prints `scan config: path aliases loaded` when the file is found.
+The CLI reports separately how many aliases were auto-detected and whether
+explicit aliases were loaded.
 
 ---
 
@@ -51,14 +66,16 @@ Typical full-stack monorepo: PHP backend with Vue assets under `resources/assets
 **Scan from monorepo root:**
 
 ```bash
-npx repo-ranger scan /path/to/monorepo --lang=both --no-merge --output=both
+repo-ranger scan /path/to/monorepo --lang=both --no-merge --output=both
 ```
 
 ---
 
 ### 2. Nuxt 3 monorepo (package-scoped aliases)
 
-Nuxt monorepos often use **one alias per package** (`@core/`, `@content/`, …). Map each prefix to `packages/<name>/` relative to the scan root.
+Nuxt monorepos often use **one alias per package** (`@core/`, `@content/`, …).
+RepoRanger normally reads these from the Nuxt/TypeScript configuration. The
+following override is only needed when those aliases are generated dynamically:
 
 Real-world example (Nuxt `packages/` layout):
 
@@ -104,7 +121,7 @@ Real-world example (Nuxt `packages/` layout):
 **Scan:**
 
 ```bash
-npx repo-ranger scan /path/to/nuxt-monorepo --lang=js --output=both
+repo-ranger scan /path/to/nuxt-monorepo --lang=js --output=both
 ```
 
 For UI → API → controller briefings, also scan the Laravel backend (`--lang=php` or `--lang=both` if both live in one tree). See [support.md](support.md#nuxt-beta).
@@ -201,7 +218,7 @@ Copy from the same place your bundler/TS resolver uses:
 
 1. Create `repo-ranger.config.json` at the scan root.
 2. Map every alias prefix your frontend imports use (`from '@core/...'`, `from '@/...'`).
-3. Run scan — confirm `scan config: path aliases loaded`.
+3. Run scan — confirm the auto-detected alias count, or `explicit path aliases loaded` when using an override.
 4. If cross-language traces have no `HTTP_REQUEST` edge, re-check aliases first.
 
 ---

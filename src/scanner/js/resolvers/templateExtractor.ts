@@ -10,6 +10,13 @@ export interface VueTemplateMetadata {
     classes: string[];
     directives: string[];
     propBindings: VuePropBinding[];
+    dynamicComponents: VueDynamicComponentBinding[];
+}
+
+export interface VueDynamicComponentBinding {
+    expression: string;
+    staticTarget?: string;
+    registry?: string;
 }
 
 const VUE_TAG_PATTERN = /<([A-Z][A-Za-z0-9]*)\b/g;
@@ -17,6 +24,9 @@ const CLASS_PATTERN = /class=(?:"([^"]+)"|'([^']+)'|:class="[^"]+")/g;
 const DIRECTIVE_PATTERN = /\b(v-[a-z-]+|:[a-z][a-z0-9-]*|@[a-z][a-z0-9-]+)/g;
 const BINDING_ATTR_PATTERN = /:([a-z][a-z0-9-]*)="([^"]+)"/g;
 const TAG_BLOCK_PATTERN = /<([A-Z][A-Za-z0-9]*)\b([\s\S]*?)(\/?)>/g;
+const DYNAMIC_COMPONENT_PATTERN = /<component\b([\s\S]*?)(?:\/?)>/gi;
+const DYNAMIC_IS_PATTERN = /(?::is|v-bind:is)\s*=\s*(["'])([\s\S]*?)\1/i;
+const STATIC_IS_PATTERN = /(?:^|\s)is\s*=\s*(["'])([^"']+)\1/i;
 
 function kebabToCamel(value: string): string {
     return value.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase());
@@ -28,6 +38,30 @@ export function extractVueTemplateMetadata(template: string): VueTemplateMetadat
     const classes = new Set<string>();
     const directives = new Set<string>();
     const propBindings: VuePropBinding[] = [];
+    const dynamicComponents: VueDynamicComponentBinding[] = [];
+
+    for (const match of template.matchAll(DYNAMIC_COMPONENT_PATTERN)) {
+        const attributes = match[1] ?? "";
+        const dynamic = attributes.match(DYNAMIC_IS_PATTERN);
+        if (dynamic?.[2]) {
+            const expression = dynamic[2].trim();
+            const quotedTarget = expression.match(/^["']([^"']+)["']$/)?.[1];
+            const registry = expression.match(/^([A-Za-z_$][\w$]*)\s*(?:\[|\.)/)?.[1];
+            dynamicComponents.push({
+                expression,
+                staticTarget: quotedTarget,
+                registry,
+            });
+            continue;
+        }
+        const staticMatch = attributes.match(STATIC_IS_PATTERN);
+        if (staticMatch?.[2]) {
+            dynamicComponents.push({
+                expression: staticMatch[2],
+                staticTarget: staticMatch[2],
+            });
+        }
+    }
 
     for (const match of template.matchAll(TAG_BLOCK_PATTERN)) {
         const tag = match[1];
@@ -80,6 +114,7 @@ export function extractVueTemplateMetadata(template: string): VueTemplateMetadat
         classes: [...classes],
         directives: [...directives].filter(item => item.startsWith("v-")),
         propBindings,
+        dynamicComponents,
     };
 }
 
@@ -89,5 +124,6 @@ export function templateKeywords(metadata: VueTemplateMetadata): string[] {
         ...metadata.props.map(prop => `prop:${prop}`),
         ...metadata.classes.map(className => `class:${className}`),
         ...metadata.directives.map(directive => `directive:${directive}`),
+        ...metadata.dynamicComponents.map(binding => `dynamic:${binding.staticTarget ?? binding.registry ?? binding.expression}`),
     ];
 }

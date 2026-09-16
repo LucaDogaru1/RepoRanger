@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { discoverPathAliasScopes, type PathAliasScope } from "./discoverPathAliases";
+import { discoverProjectScopes, type ProjectScope } from "../classification/codeLocation";
 
 export interface ScanConfig {
     pathAliases?: Record<string, string>;
     pathAliasScopes?: PathAliasScope[];
+    projectScopes?: ProjectScope[];
     httpResourceClassPattern?: string;
     scanRoot?: string;
     graphPathPrefix?: string;
@@ -43,6 +45,7 @@ export function loadScanConfig(rootDir: string, graphPathPrefix: string = ""): S
         ...DEFAULT_CONFIG,
         ...explicitConfig,
         pathAliasScopes: discoverPathAliasScopes(resolvedRoot),
+        projectScopes: discoverProjectScopes(resolvedRoot, graphPathPrefix),
         scanRoot: resolvedRoot,
         graphPathPrefix,
         explicitConfigPath,

@@ -10,6 +10,7 @@ import {
 import { importStatementType } from "../astHandlers/importStatement";
 import { ensureJsModuleNode } from "../astHandlers/jsModule";
 import { trackModuleConstants } from "../astHandlers/moduleConstants";
+import { trackComponentRegistries } from "../astHandlers/componentRegistry";
 import { JsWalkContext } from "./context";
 
 export default function walk(
@@ -29,6 +30,7 @@ export default function walk(
                 break;
             case "lexical_declaration":
                 trackModuleConstants(child, childContext);
+                trackComponentRegistries(child, childContext);
                 for (const declarator of child.children) {
                     if (declarator.type === "variable_declarator") {
                         trackHttpResourceDeclarator(declarator, childContext);

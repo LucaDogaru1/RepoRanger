@@ -14,12 +14,12 @@ results in repository code before editing.
 
 ## Primary workflow
 
-1. Extract one concrete, existing route, symbol, component, or field from the
-   task. Do not invent class names from ticket prose.
+1. Decide whether the task has a concrete existing anchor. Do not invent class
+   names from ticket prose.
 2. Reuse an existing non-empty graph path from project instructions, config, or
    common locations such as `sqlite/Graph.sqlite` or `graph.sqlite`. Do not
    rebuild the graph just to navigate.
-3. Run one compact lookup:
+3. For a concrete route, symbol, component, or field, run one compact lookup:
 
 ```bash
 npx repo-ranger locate <graph-db> "<route|class|method|component|field>"
@@ -44,11 +44,24 @@ npx repo-ranger locate <graph-db> userCountry --kind=field
 For Vue/Nuxt methods with a recorded HTTP call, `locate` crosses the
 `HTTP_REQUEST` edge into the Laravel route and backend call chain.
 
+For a feature request or vague ticket without an existing anchor, run one
+bounded task-context query instead:
+
+```bash
+npx repo-ranger context <graph-db> "<ticket summary>" --max-tokens=2500
+```
+
+Add `--runtime=nuxt`, `--runtime=legacy-vue`, or `--workspace=<name>` when the
+ticket establishes that boundary. Start with `Inspect first`; use `feature` or
+`similar` only if the context output remains ambiguous.
+
 ## Choose another command only when needed
 
 | Remaining question | Command |
 | --- | --- |
 | Need alternative matches after a wrong/ambiguous match | `find` |
+| Need a feature-level file cluster | `feature` |
+| Need implementations with a similar graph shape | `similar` |
 | Need a longer, detailed flow | `trace` |
 | Need callers, callees, implementations, or inheritance | `ai-context --compact` |
 | Need blast radius | `change-impact` or `impact` |
