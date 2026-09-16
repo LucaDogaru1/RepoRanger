@@ -101,7 +101,6 @@ type AiContextPayload = {
         persists: Array<{ type: string; from: string; to: string; via?: string | null }>;
         configRefs: Array<{ type: string; from: string; to: string; via?: string | null }>;
         warnings: string[];
-        suggestedNext: string[];
     };
 };
 
@@ -177,12 +176,6 @@ function renderNavigationSections(payload: AiContextPayload, compact: boolean): 
     if (nav.configRefs.length > 0) {
         lines.push("### Config references");
         lines.push(toBulletList(nav.configRefs.map(formatFlowEdge)));
-        lines.push("");
-    }
-
-    if (nav.suggestedNext.length > 0) {
-        lines.push("### Suggested next");
-        lines.push(toBulletList(nav.suggestedNext));
         lines.push("");
     }
 

@@ -200,17 +200,6 @@ function renderTrace(data: TraceResult): string {
         }
     }
 
-    if (data.navigation.suggestedNext.length > 0) {
-        lines.push("");
-        lines.push("Suggested next");
-        for (const step of data.navigation.suggestedNext.slice(0, 8)) {
-            lines.push(`  • ${step}`);
-        }
-    }
-
-    lines.push("");
-    lines.push(`Hint: repo-ranger ai-context ${dbPath} "${data.analysisNodeId.replace(/\\/g, "\\\\")}" --compact`);
-
     return lines.join("\n");
 }
 
@@ -301,13 +290,6 @@ function printTrace(data: TraceResult): void {
         ...data.navigation.warnings.map(w => `⚠ ${w}`),
     ];
     bulletLines(otherItems);
-
-    if (data.navigation.suggestedNext.length > 0) {
-        section("Suggested next", chalk.bold.white);
-        bulletLines(data.navigation.suggestedNext.slice(0, 8));
-    }
-
-    console.log(chalk.gray(`\nHint: repo-ranger ai-context ${dbPath} "${data.analysisNodeId.replace(/\\/g, "\\\\")}" --compact`));
 }
 
 try {

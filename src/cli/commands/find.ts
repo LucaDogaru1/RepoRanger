@@ -119,10 +119,6 @@ try {
     }
 
     lines.push("");
-    lines.push("## Next");
-    lines.push("");
-    lines.push(`repo-ranger ai-context ${dbPath} "${matches[0]!.id.replace(/\\/g, "\\\\")}" --compact`);
-    lines.push("");
 
     const output = lines.join("\n");
     console.log(output);

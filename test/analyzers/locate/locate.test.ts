@@ -57,7 +57,7 @@ if (!laravel.ok) throw new Error(laravel.error);
 
 assert.equal(laravel.data.match.id, "api:POST:api/payments");
 assert.equal(laravel.data.resolvesTo, "App\\Http\\Controllers\\PaymentController::store");
-assert.equal(laravel.data.entry?.location, "routes/api.php:18");
+assert.equal(laravel.data.entry?.location, "routes/api.php:19");
 assert.deepEqual(laravel.data.middleware, ["auth:sanctum"]);
 assert.ok(laravel.data.flow.some(line => line.includes("[middleware]")), "flow includes route middleware");
 assert.ok(laravel.data.flow.some(line => line.includes("PaymentController::store")), "flow includes controller");
@@ -85,7 +85,7 @@ assert.ok(
 const output = renderLocate(vue.data);
 assert.ok(output.split(/\s+/).length < 600, "compact output remains below the token-oriented ceiling");
 assert.ok(!output.includes("Suggested next"), "compact output does not create follow-up command churn");
-assert.match(output, /Checkout\.vue:48-72/, "output includes actionable source lines");
+assert.match(output, /Checkout\.vue:49-73/, "output includes actionable source lines");
 
 const field = buildLocate(db, "amount", { kind: "field" });
 assert.equal(field.ok, true, "request field can be located");

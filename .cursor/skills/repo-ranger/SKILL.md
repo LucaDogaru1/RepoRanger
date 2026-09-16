@@ -1,41 +1,89 @@
 ---
 name: repo-ranger
 description: >-
-  Locate the smallest relevant change area in unfamiliar PHP/Laravel,
+  Navigate to the entry point of a change in unfamiliar PHP/Laravel,
   JavaScript/TypeScript, Vue, and Nuxt repositories with the RepoRanger static
-  code graph. Use when a task contains an existing HTTP route, controller,
-  class, method, component, or field but its location or flow is unclear.
+  code graph. Use when a task names an existing HTTP route, controller, class,
+  method, or component and you do not know which file to open first.
 ---
 
 # RepoRanger
 
-Use RepoRanger as a bounded navigation shortcut, not as source of truth.
-Verify its suggestions in repository code before editing.
+RepoRanger answers one question: **which file and method do I open first?**
 
-## Navigation budget
+It is a navigator, not a search engine and not a source of truth. It does not
+prove completeness, does not find every occurrence, and does not replace
+repository search. Verify every suggestion in source before editing.
 
-- Prefer one RepoRanger command per task before inspecting source.
-- Use at most two RepoRanger commands total. Run the second only for a concrete
-  relationship question that source inspection did not answer.
-- Do not chain `find`, `locate`, `trace`, `ai-context`, and impact commands.
-- Stop graph navigation as soon as the likely implementation or root-cause area
-  is visible. Continue with source inspection, implementation, and tests.
-- Do not use RepoRanger when an exact file is already known.
+## Hard rules
 
-## Primary workflow
+1. Never run `locate` without a strong anchor. Get one first if the task does
+   not contain one.
+2. With a strong anchor, `locate` comes before opening files.
+3. `Confidence: low` means stop. Run the printed `rg` command instead. Never
+   run another graph command to repair a low-confidence result, and never
+   re-run `locate` with the same anchor.
+4. At most two RepoRanger commands per task. The second is `find`, and only for
+   the two reasons listed below.
+5. Never chain `locate` → `find` → `ai-context` → `trace` → impact commands.
+6. Once the likely file is visible, stop navigating and read source.
+7. Do not use RepoRanger when the exact file is already known.
 
-1. Extract one concrete, existing anchor from the task: an HTTP route, class,
-   method, component, or field. Do not invent plausible symbols from prose.
-2. Reuse an existing non-empty graph from project instructions or a common path
-   such as `sqlite/Graph.sqlite` or `graph.sqlite`. Do not rebuild it merely for
-   navigation.
-3. Run one lookup:
+## Step 1 — get a strong anchor
+
+`locate` only works with a **strong anchor**: a symbol that exists in the graph
+as a declaration.
+
+| Strong anchor | Weak anchor |
+| --- | --- |
+| `GET /api/v3/contents/{id}/multiview` | a database column or payload field name |
+| `App\Services\PaymentService::process` | a string literal or config key |
+| `PaymentController` | an external API property name |
+| `CheckoutForm.vue` | a concept from prose ("caching", "purge", "status") |
+
+Never invent a plausible symbol name from ticket prose. Either the task names a
+strong anchor, or you go and find one.
+
+### Path A — the task already names a strong anchor
+
+Go straight to step 2.
+
+### Path B — the task is vague (the common case)
+
+Most tickets describe a symptom, a field, or a wish, not a symbol. That is
+normal and RepoRanger still applies — you just earn the anchor first:
+
+1. Run one or two targeted repository searches on the most distinctive token in
+   the ticket: the field name, the literal, the error message, the endpoint
+   fragment, the label in the UI.
+2. Open the best hit and read the **enclosing declaration**: which class,
+   method, controller, or component is this?
+3. That declaration is your strong anchor. Run one `locate` on it to get the
+   flow, the layer below it, and the tests around it.
 
 ```bash
-npx repo-ranger locate <graph-db> "<anchor>"
+rg -n "video_duration" --type php
+# hit: app/Services/EventContentService.php:88, inside formatPayload()
+npx repo-ranger locate <graph-db> "App\\Services\\EventContentService::formatPayload"
 ```
 
-Use `--kind=route` for HTTP paths and `--kind=field` for existing fields:
+Search finds the occurrence. `locate` tells you what that occurrence is
+connected to, which is the part search cannot answer. Do not skip the search to
+`locate` the raw ticket text, and do not skip `locate` once you have a real
+symbol and still do not know the flow.
+
+This path is allowed exactly once per task. If the search finds nothing usable,
+there is no anchor — keep searching in source and leave the graph alone.
+
+## Step 2 — one locate
+
+Reuse an existing non-empty graph from project instructions or a common path
+such as `sqlite/Graph.sqlite` or `graph.sqlite`. Do not rebuild it for
+navigation.
+
+```bash
+npx repo-ranger locate <graph-db> "<anchor>" --source-root=<repo-root>
+```
 
 ```bash
 npx repo-ranger locate <graph-db> "GET /api/v3/contents/{id}/multiview" --kind=route
@@ -43,42 +91,68 @@ npx repo-ranger locate <graph-db> "App\\Services\\PaymentService::process"
 npx repo-ranger locate <graph-db> userCountry --kind=field
 ```
 
-4. Open only the relevant entries from `Inspect first`, starting with the top
-   result. Inspect no more than five suggested files before deciding whether
-   the graph helped.
-5. Read `Coverage` and warnings literally. Missing or partial coverage is not
-   evidence that code does not exist.
-6. Stop using RepoRanger and continue from verified source.
+Use `--kind=route` for HTTP paths and `--kind=field` for fields that already
+exist in the graph. Pass `--source-root` to get source snippets.
 
-## When no anchor exists
+## Step 3 — read the output in this order
 
-For a vague ticket, new feature, or unique source literal, use one targeted
-repository search first. If it reveals a concrete symbol or route whose flow is
-still unclear, run one `locate` query. Do not send the full vague ticket to a
-sequence of graph commands.
+1. **`Confidence`** — decides whether the rest is usable.
+   - `low`: stop. Run the printed `rg` command. Do not open the suggested files
+     as if they were the answer.
+   - `medium`: usable as a starting point. Verify in source.
+   - `high`: open the top result first.
+2. **`Graph`** — scan age and commit. A commit that differs from `HEAD` or an
+   age in weeks means the graph may point at moved or renamed code.
+3. **`Inspect first`** — open the top entry, then at most four more. Line ranges
+   are 1-based and include a snippet of the declaration.
+4. **`Tests`** — the existing tests for this area. Read them before changing
+   behaviour; extend them rather than writing new ones from scratch.
+5. **`Flow`** — the call path. Use it to understand layering, not as proof that
+   nothing else calls this code.
+6. **`Coverage`** and warnings — read literally. `missing: validation` means the
+   graph has no validation edges here, not that validation does not exist.
 
-## Optional second command
+## Step 4 — optional second command
 
-Use a second command only after inspecting source and only when one of these
-questions remains:
+Run `find` only for one of these two reasons, and only with an exact symbol
+name you already saw in source or in the ticket:
 
-| Unanswered question | Command |
+| Situation | Command |
 | --- | --- |
-| Need alternative matches because `locate` chose the wrong anchor | `find` |
-| Need a longer route or call flow | `trace` |
-| Need callers, implementations, or inheritance | `ai-context --compact` |
-| Need an unclear blast radius before a risky change | `change-impact` |
+| `locate` matched the wrong anchor and you need alternative candidates | `find <graph-db> "<symbol>"` |
+| `locate` showed the read path but the work lives in another app, module, or layer | `find <graph-db> "<symbol>" --runtime=backend` |
 
-Never run a second command merely to confirm information already visible in
-source. Prefer targeted repository search when the missing evidence concerns
-configuration, migrations, SQL, tests, fixtures, generated code, dynamic
-dispatch, reflection, runtime state, or external integrations.
+```bash
+npx repo-ranger find <graph-db> "FrontendCacheService" --runtime=backend
+```
+
+`find` returns a ranked symbol list with no flow, no tests, and no confidence.
+It is a lookup, not a step in a chain — read source from its results.
+
+Do not run a second command to confirm something already visible in source.
+
+## Questions the graph cannot answer
+
+For these, repository search is the correct tool, not a fallback. Use it and do
+not come back to the graph unless the search hands you a new strong anchor
+whose flow you still do not know (path B):
+
+- a field name, column, payload key, or string literal
+- configuration, environment values, or route middleware wiring
+- migrations, SQL, seeders, or fixtures
+- a **missing** call, hook, listener, or invalidation after a write
+- every occurrence of something, for a rename or a sweep
+- dynamic dispatch, reflection, magic methods, or runtime-resolved bindings
+- generated code or vendor integrations
+
+A graph shows what exists. It cannot show what is absent, and it does not
+enumerate literals.
 
 ## Failure and freshness rules
 
-- If the graph is absent, empty, or likely stale, use normal repository search.
-- Treat a missing result as unknown, not as proof of absence.
+- If the graph is absent, empty, or stale, use repository search.
+- Treat a missing result as unknown, never as proof of absence.
 - If RepoRanger fails with `EPERM` or an IPC-pipe error, retry once with the
   required permission, then fall back to repository search.
-- Preserve the command's real exit code; do not pipe through output truncation
+- Preserve the command's real exit code; do not pipe through truncation
   commands that can hide failures.

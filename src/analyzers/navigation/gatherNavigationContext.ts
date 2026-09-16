@@ -6,7 +6,6 @@ import {
     HttpUpstreamRow,
     BladeEntryRow,
     buildNavigationWarnings,
-    buildSuggestedNextSteps,
     countGraphEntries,
     filterFieldIntakeEdges,
     filterFieldFlowEdges,
@@ -36,7 +35,6 @@ export interface NavigationContext {
     persists: NavigationEdgeRow[];
     configRefs: NavigationEdgeRow[];
     warnings: string[];
-    suggestedNext: string[];
 }
 
 export interface GatherNavigationOptions {
@@ -51,7 +49,7 @@ function gatherForMethod(
     methodId: string,
     limit: number,
     includeInterfaceResolved: boolean,
-): Omit<NavigationContext, "warnings" | "suggestedNext"> {
+): Omit<NavigationContext, "warnings"> {
     return {
         routeEntries: findIncomingRoutes(db, methodId, limit),
         bladeEntries: findIncomingBladeActions(db, methodId, limit),
@@ -76,7 +74,7 @@ export function gatherNavigationContext(
 ): NavigationContext {
     const limit = options?.limit ?? 20;
     const includeInterfaceResolved = options?.includeInterfaceResolved ?? false;
-    let partial: Omit<NavigationContext, "warnings" | "suggestedNext">;
+    let partial: Omit<NavigationContext, "warnings">;
 
     if (target.type === "method") {
         partial = gatherForMethod(db, target.id, limit, includeInterfaceResolved);
@@ -181,16 +179,7 @@ export function gatherNavigationContext(
         calleesCount: options?.callees?.length ?? 0,
     });
 
-    const suggestedNext = buildSuggestedNextSteps({
-        routeEntries: partial.routeEntries,
-        bladeEntries: partial.bladeEntries,
-        callees: options?.callees ?? [],
-        fieldAssignments: partial.fieldAssignments,
-        fieldFlowsOut: partial.fieldFlowsOut,
-        persists: partial.persists,
-    });
-
-    return { ...partial, warnings, suggestedNext };
+    return { ...partial, warnings };
 }
 
 function dedupeEdges(edges: NavigationEdgeRow[]): NavigationEdgeRow[] {
