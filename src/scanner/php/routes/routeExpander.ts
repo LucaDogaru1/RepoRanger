@@ -3,12 +3,15 @@ export interface RouteDefinition {
     path: string;
     controller: string;
     action: string;
+    middleware?: string[];
 }
 
 const RESOURCE_ACTIONS: Array<{ method: string; suffix: string; action: string }> = [
     { method: "GET", suffix: "", action: "index" },
+    { method: "GET", suffix: "/create", action: "create" },
     { method: "POST", suffix: "", action: "store" },
     { method: "GET", suffix: "/{param}", action: "show" },
+    { method: "GET", suffix: "/{param}/edit", action: "edit" },
     { method: "PUT", suffix: "/{param}", action: "update" },
     { method: "PATCH", suffix: "/{param}", action: "update" },
     { method: "DELETE", suffix: "/{param}", action: "destroy" },
@@ -36,7 +39,7 @@ export function expandResourceRoutes(
     basePath: string,
     controller: string,
     prefix: string,
-    options?: { only?: string[]; except?: string[] }
+    options?: { only?: string[]; except?: string[]; middleware?: string[] }
 ): RouteDefinition[] {
     const normalizedBase = joinRoutePath(prefix, normalizeBasePath(basePath));
     const allowed = new Set(
@@ -71,6 +74,7 @@ export function expandResourceRoutes(
             path: `${normalizedBase}${item.suffix}`.replace(/\/+/g, "/"),
             controller,
             action: item.action,
+            middleware: options?.middleware,
         });
     }
 
@@ -82,12 +86,14 @@ export function buildSingleRoute(
     path: string,
     controller: string,
     action: string,
-    prefix: string
+    prefix: string,
+    middleware?: string[]
 ): RouteDefinition {
     return {
         method: method.toUpperCase(),
         path: joinRoutePath(prefix, normalizeBasePath(path)),
         controller,
         action,
+        middleware,
     };
 }

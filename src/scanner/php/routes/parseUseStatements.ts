@@ -1,7 +1,7 @@
 export function parseUseStatements(source: string): Map<string, string> {
     const imports = new Map<string, string>();
 
-    for (const match of source.matchAll(/^use\s+([^;]+);/gm)) {
+    for (const match of source.matchAll(/^\s*use\s+([^;]+);/gm)) {
         const statement = match[1]?.trim() ?? "";
         if (!statement || statement.startsWith("function ")) {
             continue;

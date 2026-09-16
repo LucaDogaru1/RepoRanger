@@ -12,13 +12,14 @@ import { processVueFile } from "../vue/processVueFile";
 import walk, { createWalkContext } from "../walk/jsWalker";
 import { errorDetail, recordScanFailure } from "../../../shared/reporting/scanFailures";
 import { createScanProgress } from "../../../shared/reporting/scanProgress";
+import { parseTreeSitterSource } from "../../../shared/parsing/parseTreeSitterSource";
 
 function isVueFile(relativePath: string): boolean {
     return relativePath.endsWith(".vue");
 }
 
 function isTypeScriptFile(relativePath: string): boolean {
-    return relativePath.endsWith(".ts") && !relativePath.endsWith(".d.ts");
+    return relativePath.endsWith(".ts");
 }
 
 function readSource(file: ScannedJsFile): string {
@@ -42,7 +43,7 @@ function populateHttpResourceRegistry(files: ScannedJsFile[]): void {
 }
 
 function walkJsSource(source: string, relativePath: string, parser: Parser): void {
-    const tree = parser.parse(source);
+    const tree = parseTreeSitterSource(parser, source);
 
     if (tree.rootNode.hasError) {
         throw new Error(`parse errors in ${relativePath}`);

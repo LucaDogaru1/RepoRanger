@@ -36,10 +36,24 @@ export interface LocateResult {
     entry: LocateEntry | null;
     resolvesTo: string | null;
     httpBridge: { fromId: string; endpointId: string } | null;
+    middleware: string[];
     flow: string[];
     files: LocateFile[];
     coverage: TraceResult["coverage"];
     warnings: string[];
+}
+
+function findRouteMiddleware(db: SQLiteDatabase, endpointId: string): string[] {
+    const rows = db.prepare(`
+        SELECT e.to_id
+        FROM edges e
+        WHERE e.from_id = ?
+          AND e.type = 'USES_MIDDLEWARE'
+        ORDER BY e.to_id ASC
+        LIMIT 12
+    `).all(endpointId) as Array<{ to_id: string }>;
+
+    return rows.map(row => row.to_id.replace(/^middleware:/, ""));
 }
 
 export type LocateBuildResult =
@@ -233,13 +247,21 @@ function rankFiles(
         .map(({ score: _score, order: _order, ...file }) => file);
 }
 
-function buildFlow(matchedNode: GraphNodeRow, trace: TraceResult, bridge: LocateResult["httpBridge"]): string[] {
+function buildFlow(
+    matchedNode: GraphNodeRow,
+    trace: TraceResult,
+    bridge: LocateResult["httpBridge"],
+    middleware: string[],
+): string[] {
     const lines: string[] = [];
     if (bridge) {
         lines.push(compactLabel(matchedNode.id));
         lines.push(`  → ${compactLabel(bridge.endpointId)} [HTTP]`);
     } else {
         lines.push(compactLabel(trace.target.id));
+    }
+    if (middleware.length > 0) {
+        lines.push(`  → ${middleware.join(", ")} [middleware]`);
     }
     if (trace.resolvesTo) {
         lines.push(`  → ${compactLabel(trace.resolvesTo)} [handler]`);
@@ -281,6 +303,7 @@ export function buildLocate(
 
     const trace = traceResult.data;
     const entryNode = trace.target.type === "api_endpoint" ? trace.target : null;
+    const middleware = entryNode ? findRouteMiddleware(db, entryNode.id) : [];
     const entryLocation = entryNode && !(httpBridge && entryNode.file === matchedNode.file)
         ? compactLocation(entryNode)
         : null;
@@ -305,7 +328,8 @@ export function buildLocate(
             entry: entryNode ? { id: entryNode.id, location: entryLocation } : null,
             resolvesTo: trace.resolvesTo,
             httpBridge,
-            flow: buildFlow(matchedNode, trace, httpBridge),
+            middleware,
+            flow: buildFlow(matchedNode, trace, httpBridge, middleware),
             files: rankFiles(db, matchedNode, trace, maxFiles),
             coverage: trace.coverage,
             warnings,

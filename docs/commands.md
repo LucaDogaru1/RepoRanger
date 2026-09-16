@@ -399,7 +399,7 @@ Use the returned graph id with `trace`, `ai-context`, or `change-impact`.
 ## Locate
 
 Purpose: resolve one route, class, method, component, or field and return a
-compact best-path flow plus at most five prioritized source files. A recorded
+compact best-path flow, route middleware, and at most five prioritized source files. A recorded
 Vue/Nuxt `HTTP_REQUEST` is followed into its Laravel route and backend calls.
 
 ```bash

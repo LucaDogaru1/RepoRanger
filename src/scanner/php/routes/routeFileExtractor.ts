@@ -9,6 +9,19 @@ import { recordRoutes } from "./recordRoute";
 
 const ROUTE_CALL_PATTERN = /Route::(get|post|put|patch|delete|resource|apiResource)\s*\(/gi;
 
+interface RouteModifiers {
+    only?: string[];
+    except?: string[];
+    middleware?: string[];
+}
+
+interface RouteGroupContext {
+    start: number;
+    end: number;
+    prefix: string;
+    middleware: string[];
+}
+
 export function isRouteFile(relativePath: string): boolean {
     const normalized = relativePath.replace(/\\/g, "/");
     return /(?:^|\/)routes\/[^/]+\.php$/i.test(normalized);
@@ -88,13 +101,13 @@ function readModifierActionList(raw: string): string[] {
 }
 
 function readRouteModifierActions(tail: string, method: "only" | "except"): string[] | undefined {
-    const arrayMatch = tail.match(new RegExp(`^\\s*->${method}\\s*\\(\\s*\\[([^\\]]+)\\]`));
+    const arrayMatch = tail.match(new RegExp(`->${method}\\s*\\(\\s*\\[([^\\]]+)\\]`));
     if (arrayMatch) {
         const actions = readModifierActionList(arrayMatch[1]!);
         return actions.length > 0 ? actions : undefined;
     }
 
-    const parenMatch = tail.match(new RegExp(`^\\s*->${method}\\s*\\(([^)]+)\\)`));
+    const parenMatch = tail.match(new RegExp(`->${method}\\s*\\(([^)]+)\\)`));
     if (parenMatch) {
         const actions = readModifierActionList(parenMatch[1]!);
         return actions.length > 0 ? actions : undefined;
@@ -103,51 +116,166 @@ function readRouteModifierActions(tail: string, method: "only" | "except"): stri
     return undefined;
 }
 
-function readRouteModifiers(source: string, startIndex: number): { only?: string[]; except?: string[] } {
-    const tail = source.slice(startIndex);
+function unique(values: string[]): string[] {
+    return [...new Set(values.filter(Boolean))];
+}
+
+function readMiddlewareArguments(value: string, imports: Map<string, string>): string[] {
+    const strings = readStringLiterals(value);
+    const classes = [...value.matchAll(/([A-Za-z_][A-Za-z0-9_\\]*)::class/g)]
+        .map(match => resolveControllerClass(match[1]!, imports));
+    return unique([...strings, ...classes]);
+}
+
+function readMiddlewareCalls(value: string, imports: Map<string, string>): string[] {
+    const middleware: string[] = [];
+    const pattern = /(?:Route::|->)middleware\s*\(/gi;
+
+    for (const match of value.matchAll(pattern)) {
+        const openIndex = match.index! + match[0].length - 1;
+        const args = extractBalancedParentheses(value, openIndex);
+        if (args !== null) {
+            middleware.push(...readMiddlewareArguments(args, imports));
+        }
+    }
+
+    return unique(middleware);
+}
+
+function readRouteModifiers(
+    source: string,
+    startIndex: number,
+    imports: Map<string, string>
+): RouteModifiers {
+    const semicolon = source.indexOf(";", startIndex);
+    const tail = source.slice(startIndex, semicolon >= 0 ? semicolon + 1 : source.length);
 
     return {
         only: readRouteModifierActions(tail, "only"),
         except: readRouteModifierActions(tail, "except"),
+        middleware: readMiddlewareCalls(tail, imports),
     };
 }
 
-function readPrefixFromLine(line: string): string | null {
-    const groupMatch = line.match(/['"]prefix['"]\s*=>\s*['"]([^'"]+)['"]/);
-    if (groupMatch) {
-        return groupMatch[1]!;
+function readGroupPrefix(header: string): string {
+    const prefixes: string[] = [];
+    const chainedPattern = /(?:Route::|->)prefix\s*\(\s*(['"])([^'"]+)\1\s*\)/gi;
+    for (const match of header.matchAll(chainedPattern)) {
+        prefixes.push(match[2]!);
     }
 
-    const prefixMatch = line.match(/Route::prefix\s*\(\s*['"]([^'"]+)['"]\s*\)/);
-    if (prefixMatch) {
-        return prefixMatch[1]!;
+    const arrayMatch = header.match(/['"]prefix['"]\s*=>\s*['"]([^'"]+)['"]/i);
+    if (arrayMatch) {
+        prefixes.push(arrayMatch[1]!);
+    }
+
+    return prefixes.join("/");
+}
+
+function readGroupMiddleware(header: string, imports: Map<string, string>): string[] {
+    const middleware = readMiddlewareCalls(header, imports);
+    const arrayMatch = header.match(
+        /['"]middleware['"]\s*=>\s*(\[[\s\S]*?\]|['"][^'"]+['"]|[A-Za-z_][A-Za-z0-9_\\]*::class)/i
+    );
+    if (arrayMatch) {
+        middleware.push(...readMiddlewareArguments(arrayMatch[1]!, imports));
+    }
+    return unique(middleware);
+}
+
+function findMatchingBrace(source: string, openIndex: number): number | null {
+    let depth = 0;
+    let quote: "'" | '"' | null = null;
+    let escaped = false;
+    let lineComment = false;
+    let blockComment = false;
+
+    for (let index = openIndex; index < source.length; index += 1) {
+        const char = source[index]!;
+        const next = source[index + 1];
+
+        if (lineComment) {
+            if (char === "\n") lineComment = false;
+            continue;
+        }
+        if (blockComment) {
+            if (char === "*" && next === "/") {
+                blockComment = false;
+                index += 1;
+            }
+            continue;
+        }
+        if (quote) {
+            if (escaped) {
+                escaped = false;
+            } else if (char === "\\") {
+                escaped = true;
+            } else if (char === quote) {
+                quote = null;
+            }
+            continue;
+        }
+
+        if (char === "'" || char === '"') {
+            quote = char;
+        } else if ((char === "/" && next === "/") || char === "#") {
+            lineComment = true;
+            if (char === "/") index += 1;
+        } else if (char === "/" && next === "*") {
+            blockComment = true;
+            index += 1;
+        } else if (char === "{") {
+            depth += 1;
+        } else if (char === "}") {
+            depth -= 1;
+            if (depth === 0) {
+                return index;
+            }
+        }
     }
 
     return null;
 }
 
-function prefixAtIndex(source: string, index: number): string {
-    const before = source.slice(0, index);
-    const stack: string[] = [];
-    let depth = 0;
+function collectRouteGroups(source: string, imports: Map<string, string>): RouteGroupContext[] {
+    const groups: RouteGroupContext[] = [];
 
-    for (const line of before.split("\n")) {
-        const prefix = readPrefixFromLine(line);
-        if (prefix !== null) {
-            stack[depth] = prefix;
-        }
+    for (const routeStart of source.matchAll(/Route::/g)) {
+        const start = routeStart.index!;
+        const remaining = source.slice(start);
+        const groupMatch = remaining.match(/(?:Route::group|->group)\s*\(/i);
+        if (!groupMatch || groupMatch.index === undefined) continue;
 
-        for (const char of line) {
-            if (char === "{") {
-                depth += 1;
-            } else if (char === "}") {
-                depth = Math.max(0, depth - 1);
-                stack.length = depth;
-            }
-        }
+        const groupIndex = start + groupMatch.index;
+        const semicolon = source.indexOf(";", start);
+        if (semicolon >= 0 && semicolon < groupIndex) continue;
+
+        const functionIndex = source.indexOf("function", groupIndex);
+        if (functionIndex < 0 || (semicolon >= 0 && semicolon < functionIndex)) continue;
+
+        const openBrace = source.indexOf("{", functionIndex);
+        if (openBrace < 0) continue;
+        const closeBrace = findMatchingBrace(source, openBrace);
+        if (closeBrace === null) continue;
+
+        const header = source.slice(start, openBrace);
+        groups.push({
+            start: openBrace,
+            end: closeBrace,
+            prefix: readGroupPrefix(header),
+            middleware: readGroupMiddleware(header, imports),
+        });
     }
 
-    return stack.filter(Boolean).join("/");
+    return groups.sort((a, b) => a.start - b.start);
+}
+
+function groupContextAtIndex(groups: RouteGroupContext[], index: number): { prefix: string; middleware: string[] } {
+    const active = groups.filter(group => group.start < index && index < group.end);
+    return {
+        prefix: active.map(group => group.prefix).filter(Boolean).join("/"),
+        middleware: unique(active.flatMap(group => group.middleware)),
+    };
 }
 
 function parseRouteCall(
@@ -155,7 +283,7 @@ function parseRouteCall(
     args: string,
     prefix: string,
     imports: Map<string, string>,
-    modifiers: { only?: string[]; except?: string[] }
+    modifiers: RouteModifiers
 ): RouteDefinition[] {
     const strings = readStringLiterals(args);
     const controllerRef = readControllerReference(args, imports);
@@ -192,7 +320,8 @@ function parseRouteCall(
             path,
             controllerRef.controller,
             action,
-            prefix
+            prefix,
+            modifiers.middleware
         ),
     ];
 }
@@ -200,6 +329,7 @@ function parseRouteCall(
 export function extractRoutesFromSource(source: string): RouteDefinition[] {
     const imports = parseUseStatements(source);
     const routes: RouteDefinition[] = [];
+    const groups = collectRouteGroups(source, imports);
 
     for (const match of source.matchAll(ROUTE_CALL_PATTERN)) {
         const verb = match[1]?.toLowerCase();
@@ -214,9 +344,10 @@ export function extractRoutesFromSource(source: string): RouteDefinition[] {
         }
 
         const closeIndex = openIndex + args.length + 2;
-        const prefix = prefixAtIndex(source, match.index!);
-        const modifiers = readRouteModifiers(source, closeIndex);
-        const parsed = parseRouteCall(verb, args, prefix, imports, modifiers);
+        const group = groupContextAtIndex(groups, match.index!);
+        const modifiers = readRouteModifiers(source, closeIndex, imports);
+        modifiers.middleware = unique([...group.middleware, ...(modifiers.middleware ?? [])]);
+        const parsed = parseRouteCall(verb, args, group.prefix, imports, modifiers);
         routes.push(...parsed);
     }
 

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { graph, resetGraph } from "../../../../src/graph/graph";
+import { recordRoutes } from "../../../../src/scanner/php/routes/recordRoute";
 import { extractRoutesFromSource } from "../../../../src/scanner/php/routes/routeFileExtractor";
 
 function test(name: string, fn: () => void): void {
@@ -71,7 +73,7 @@ test("apiResource maps all REST verbs to correct actions", () => {
     assert.equal(actions.get("DELETE /posts/{param}"), "destroy");
 });
 
-test("resource maps REST verbs like apiResource (create/edit not expanded)", () => {
+test("resource includes browser create and edit routes", () => {
     const routes = extractRoutesFromSource(`
         use App\\Http\\Controllers\\PostController;
 
@@ -80,13 +82,28 @@ test("resource maps REST verbs like apiResource (create/edit not expanded)", () 
 
     const actions = routeActions(routes);
 
-    assert.equal(routes.length, 6);
+    assert.equal(routes.length, 8);
     assert.equal(actions.get("GET /posts"), "index");
+    assert.equal(actions.get("GET /posts/create"), "create");
     assert.equal(actions.get("POST /posts"), "store");
     assert.equal(actions.get("GET /posts/{param}"), "show");
+    assert.equal(actions.get("GET /posts/{param}/edit"), "edit");
     assert.equal(actions.get("PUT /posts/{param}"), "update");
     assert.equal(actions.get("PATCH /posts/{param}"), "update");
     assert.equal(actions.get("DELETE /posts/{param}"), "destroy");
+});
+
+test("resource only can select create and edit", () => {
+    const routes = extractRoutesFromSource(`
+        use App\\Http\\Controllers\\PostController;
+
+        Route::resource('posts', PostController::class)->only(['create', 'edit']);
+    `);
+
+    const actions = routeActions(routes);
+    assert.equal(routes.length, 2);
+    assert.equal(actions.get("GET /posts/create"), "create");
+    assert.equal(actions.get("GET /posts/{param}/edit"), "edit");
 });
 
 test("apiResource ->only array keeps selected actions", () => {
@@ -138,4 +155,89 @@ test("apiResource ->except string removes single action", () => {
 
     assert.equal(actions.has("show"), false);
     assert.equal(routes.length, 5);
+});
+
+test("nested fluent groups compose prefixes and middleware", () => {
+    const routes = extractRoutesFromSource(`
+        use App\\Http\\Controllers\\PostController;
+        use App\\Http\\Middleware\\EnsureTenant;
+
+        Route::middleware(['auth:sanctum', EnsureTenant::class])
+            ->prefix('api')
+            ->group(function () {
+                Route::prefix('v1')->middleware('verified')->group(function () {
+                    Route::get('posts', [PostController::class, 'index']);
+                    Route::resource('posts', PostController::class)
+                        ->middleware('can:manage-posts')
+                        ->only(['create', 'edit']);
+                });
+            });
+
+        Route::get('health', PostController::class)->middleware('throttle:health');
+    `);
+
+    const index = routes.find(route => route.action === "index");
+    assert.equal(index?.path, "api/v1/posts");
+    assert.deepEqual(index?.middleware, [
+        "auth:sanctum",
+        "App\\Http\\Middleware\\EnsureTenant",
+        "verified",
+    ]);
+
+    const create = routes.find(route => route.action === "create");
+    assert.equal(create?.path, "api/v1/posts/create");
+    assert.deepEqual(create?.middleware, [
+        "auth:sanctum",
+        "App\\Http\\Middleware\\EnsureTenant",
+        "verified",
+        "can:manage-posts",
+    ]);
+
+    const health = routes.find(route => route.path === "/health");
+    assert.deepEqual(health?.middleware, ["throttle:health"]);
+});
+
+test("legacy group arrays apply prefix and middleware without leaking to siblings", () => {
+    const routes = extractRoutesFromSource(`
+        use App\\Http\\Controllers\\AdminController;
+
+        Route::group([
+            'prefix' => 'admin',
+            'middleware' => ['web', 'auth'],
+        ], function () {
+            Route::post('reports', [AdminController::class, 'store']);
+        });
+
+        Route::post('reports', [AdminController::class, 'publicStore']);
+    `);
+
+    const grouped = routes.find(route => route.action === "store");
+    const sibling = routes.find(route => route.action === "publicStore");
+    assert.equal(grouped?.path, "admin/reports");
+    assert.deepEqual(grouped?.middleware, ["web", "auth"]);
+    assert.equal(sibling?.path, "/reports");
+    assert.deepEqual(sibling?.middleware, []);
+});
+
+test("recordRoutes persists middleware nodes and edges", () => {
+    resetGraph();
+    recordRoutes([
+        {
+            method: "GET",
+            path: "/admin/reports",
+            controller: "App\\Http\\Controllers\\AdminController",
+            action: "index",
+            middleware: ["auth", "verified"],
+        },
+    ], "routes/web.php");
+
+    assert.equal(graph.nodes.get("middleware:auth")?.type, "middleware");
+    assert.equal(graph.nodes.get("middleware:auth")?.file, "routes/web.php");
+    assert.ok(
+        [...graph.edges.values()].some(edge =>
+            edge.type === "USES_MIDDLEWARE" && edge.to === "middleware:verified"
+        ),
+        "middleware edge is recorded"
+    );
+    resetGraph();
 });

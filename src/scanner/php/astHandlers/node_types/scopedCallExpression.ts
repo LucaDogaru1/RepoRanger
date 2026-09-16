@@ -225,6 +225,7 @@ function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
     const imports = context.imports;
     const strings = collectStrings(node);
     const controllerRef = readControllerReferenceFromNode(node, imports);
+    const modifiers = readRouteModifiersFromText(node.text, imports);
 
     if (!controllerRef) {
         return;
@@ -242,7 +243,7 @@ function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
                 basePath,
                 controllerRef.controller,
                 "",
-                readRouteModifiersFromText(node.text)
+                modifiers
             )
         );
         return;
@@ -261,7 +262,8 @@ function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
             path,
             controllerRef.controller,
             action,
-            ""
+            "",
+            modifiers.middleware
         ),
     ]);
 }
@@ -289,7 +291,10 @@ function readControllerReferenceFromNode(
     };
 }
 
-function readRouteModifiersFromText(text: string): { only?: string[]; except?: string[] } {
+function readRouteModifiersFromText(
+    text: string,
+    imports: Map<string, string>
+): { only?: string[]; except?: string[]; middleware?: string[] } {
     const readActions = (raw: string): string[] =>
         [...raw.matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]!);
 
@@ -309,9 +314,18 @@ function readRouteModifiersFromText(text: string): { only?: string[]; except?: s
         return undefined;
     };
 
+    const middleware: string[] = [];
+    for (const match of text.matchAll(/->middleware\s*\(([^)]*)\)/g)) {
+        middleware.push(...readActions(match[1]!));
+        for (const classMatch of match[1]!.matchAll(/([A-Za-z_][A-Za-z0-9_\\]*)::class/g)) {
+            middleware.push(resolveControllerClass(classMatch[1]!, imports));
+        }
+    }
+
     return {
         only: readMethod("only"),
         except: readMethod("except"),
+        middleware: [...new Set(middleware)],
     };
 }
 

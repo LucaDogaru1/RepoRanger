@@ -23,5 +23,23 @@ export function recordRoutes(routes: RouteDefinition[], file?: string): void {
             via: route.action,
             reason: label,
         });
+
+        for (const middleware of route.middleware ?? []) {
+            const middlewareId = `middleware:${middleware}`;
+            graph.nodes.set(middlewareId, {
+                id: middlewareId,
+                type: "middleware",
+                name: middleware,
+                file,
+                description: "Laravel route middleware",
+            });
+            graph.edges.set(`${endpointId}->${middlewareId}:USES_MIDDLEWARE`, {
+                from: endpointId,
+                to: middlewareId,
+                type: "USES_MIDDLEWARE",
+                via: middleware,
+                reason: `${label} uses Laravel middleware ${middleware}`,
+            });
+        }
     }
 }

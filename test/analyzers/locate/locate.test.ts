@@ -28,12 +28,14 @@ INSERT INTO nodes VALUES
   ('App\\Queries\\CreatePaymentQuery::execute', 'App\\Queries\\CreatePaymentQuery', 'method', 'execute', 'app/Queries/CreatePaymentQuery.php', 15, 39),
   ('js:resources/js/pages/Checkout.vue::submit', 'js:resources/js/pages/Checkout.vue', 'method', 'submit', 'resources/js/pages/Checkout.vue', 48, 72),
   ('request_field:amount', NULL, 'request_field', 'amount', NULL, NULL, NULL),
+  ('middleware:auth:sanctum', NULL, 'middleware', 'auth:sanctum', 'routes/api.php', NULL, NULL),
   ('App\\Http\\Controllers\\PaymentController::store::$amount', 'App\\Http\\Controllers\\PaymentController::store', 'variable_field', '$amount', NULL, NULL, NULL),
   ('validation:payment:amount', NULL, 'validation', 'amount', NULL, NULL, NULL);
 
 INSERT INTO edges VALUES
   ('js:resources/js/pages/Checkout.vue::submit', 'api:POST:api/payments', 'HTTP_REQUEST', NULL, '$fetch'),
   ('api:POST:api/payments', 'App\\Http\\Controllers\\PaymentController::store', 'ROUTES_TO', NULL, NULL),
+  ('api:POST:api/payments', 'middleware:auth:sanctum', 'USES_MIDDLEWARE', NULL, 'auth:sanctum'),
   ('App\\Http\\Controllers\\PaymentController::store', 'App\\Data\\PaymentRequestDto::fromRequest', 'CALLS', 'STATIC', NULL),
   ('App\\Http\\Controllers\\PaymentController::store', 'App\\Services\\PaymentService::create', 'CALLS', 'INSTANCE', NULL),
   ('App\\Services\\PaymentService::create', 'App\\Queries\\PaymentQueryFactory::create', 'CALLS', 'INSTANCE', NULL),
@@ -56,6 +58,8 @@ if (!laravel.ok) throw new Error(laravel.error);
 assert.equal(laravel.data.match.id, "api:POST:api/payments");
 assert.equal(laravel.data.resolvesTo, "App\\Http\\Controllers\\PaymentController::store");
 assert.equal(laravel.data.entry?.location, "routes/api.php:18");
+assert.deepEqual(laravel.data.middleware, ["auth:sanctum"]);
+assert.ok(laravel.data.flow.some(line => line.includes("[middleware]")), "flow includes route middleware");
 assert.ok(laravel.data.flow.some(line => line.includes("PaymentController::store")), "flow includes controller");
 assert.ok(laravel.data.flow.some(line => line.includes("CreatePaymentQuery::execute")), "flow includes query");
 assert.ok(laravel.data.files.length <= 5, "locate never returns more than five files");

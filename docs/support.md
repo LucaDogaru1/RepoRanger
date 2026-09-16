@@ -26,7 +26,8 @@ See [config-setup.md](config-setup.md) for copy-paste examples, or [scan-config.
 ### PHP (primary)
 
 - Classes, interfaces, methods, properties
-- Laravel-style routes and controller entrypoints
+- Laravel `get`/`post`/`put`/`patch`/`delete`, `resource`, and `apiResource` routes
+- Nested route-group prefixes and middleware, including invokable controllers
 - Call, extends, implements, and dependency edges
 - Jobs, listeners, commands as workflow entrypoints
 - Field / validation / config references (for graph search and flow tracing)

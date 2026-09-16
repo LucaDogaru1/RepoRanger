@@ -38,6 +38,7 @@ SlidePresetsController::index
 | `interface` | PHP interface |
 | `method` | Method on class/interface |
 | `api_endpoint` | Laravel route endpoint |
+| `middleware` | Middleware attached to a Laravel route |
 | `request_field` | Validated request field |
 | `integration_entrypoint` | Job, listener, command, etc. |
 
@@ -63,6 +64,7 @@ SlidePresetsController::index
 | `CALLS` | Direct method call |
 | `DEPENDS_ON` | Constructor injection |
 | `ROUTES_TO` | API endpoint → controller method |
+| `USES_MIDDLEWARE` | API endpoint → route middleware |
 | `PERSIST` / `SERIALIZES` | Model/request/response field flow |
 
 ### JavaScript / Vue

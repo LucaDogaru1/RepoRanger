@@ -34,6 +34,25 @@ function testParseVueScriptUsesTypeScriptParserForScriptSetup(): void {
     assert.equal(parsed.tree.rootNode.hasError, false);
 }
 
+function testParseLargeVueTypeScriptBlock(): void {
+    const rawScript = Array.from(
+        { length: 1_500 },
+        (_, index) => `const value${index}: string = 'value-${index}';`,
+    ).join("\n");
+    assert.ok(rawScript.length > 32 * 1024);
+
+    const parsed = parseVueScript(
+        rawScript,
+        "ts",
+        createJsParser(),
+        createTsParser()
+    );
+
+    assert.equal(parsed.usedTsParser, true);
+    assert.equal(parsed.tree.rootNode.hasError, false);
+    assert.equal(parsed.tree.rootNode.endIndex, rawScript.length);
+}
+
 function testProcessVueFileWalksSnackBar(): void {
     if (!fs.existsSync(snackBarVue)) {
         return;
@@ -61,6 +80,9 @@ function run(): void {
 
     testParseVueScriptUsesTypeScriptParserForScriptSetup();
     console.log("  ✓ parseVueScript uses TS parser for script setup");
+
+    testParseLargeVueTypeScriptBlock();
+    console.log("  ✓ parses Vue script blocks larger than 32 KiB");
 
     testProcessVueFileWalksSnackBar();
     console.log("  ✓ processVueFile walks SnackBar.vue");

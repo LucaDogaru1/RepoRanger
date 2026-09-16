@@ -1,5 +1,6 @@
 import Parser from "tree-sitter";
 import { stripTypescript } from "../nuxt/stripTypescript";
+import { parseTreeSitterSource } from "../../../shared/parsing/parseTreeSitterSource";
 
 export interface ParsedVueScript {
     tree: Parser.Tree;
@@ -20,7 +21,7 @@ export function parseVueScript(
 ): ParsedVueScript {
     if (isTypeScriptLang(lang)) {
         try {
-            const tree = tsParser.parse(rawScript);
+            const tree = parseTreeSitterSource(tsParser, rawScript);
             if (!tree.rootNode.hasError) {
                 return {
                     tree,
@@ -35,7 +36,7 @@ export function parseVueScript(
 
         const stripped = stripTypescript(rawScript);
         return {
-            tree: jsParser.parse(stripped),
+            tree: parseTreeSitterSource(jsParser, stripped),
             scriptSource: stripped,
             usedTsParser: false,
             usedStripFallback: true,
@@ -43,7 +44,7 @@ export function parseVueScript(
     }
 
     return {
-        tree: jsParser.parse(rawScript),
+        tree: parseTreeSitterSource(jsParser, rawScript),
         scriptSource: rawScript,
         usedTsParser: false,
         usedStripFallback: false,
