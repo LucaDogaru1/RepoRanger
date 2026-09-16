@@ -37,6 +37,25 @@ type NodeRow = {
     file: string | null;
 };
 
+const SOURCE_FILE_EXTENSIONS = [
+    ".vue",
+    ".tsx",
+    ".ts",
+    ".jsx",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".php",
+    ".blade.php",
+];
+
+const TOKEN_VARIANT_SCORE_CAP = 650;
+const FILE_REPRESENTATIVE_TYPES = new Set([
+    "js_module",
+    "vue_component",
+    "blade_view",
+]);
+
 const SYMBOL_TYPES = new Set([
     "class",
     "method",
@@ -62,6 +81,20 @@ function escapeLike(value: string): string {
 
 function normalizeQuery(raw: string): string {
     return raw.trim().replace(/\\/g, "\\");
+}
+
+function normalizeSearchPath(value: string): string {
+    return value.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function fileNameParts(file: string): { baseName: string; stem: string } {
+    const normalized = normalizeSearchPath(file);
+    const baseName = normalized.slice(normalized.lastIndexOf("/") + 1);
+    const extension = SOURCE_FILE_EXTENSIONS.find(candidate =>
+        baseName.toLowerCase().endsWith(candidate)
+    );
+    const stem = extension ? baseName.slice(0, -extension.length) : baseName;
+    return { baseName, stem };
 }
 
 function detectKind(query: string, explicit?: SearchKind): SearchKind {
@@ -110,33 +143,60 @@ function scoreMatch(
     const id = row.id.toLowerCase();
     const name = (row.name ?? "").toLowerCase();
     const file = (row.file ?? "").toLowerCase();
+    const normalizedQueryPath = normalizeSearchPath(query).toLowerCase();
+    const normalizedFilePath = normalizeSearchPath(row.file ?? "").toLowerCase();
+    const { baseName, stem } = fileNameParts(row.file ?? "");
+    const lowerBaseName = baseName.toLowerCase();
+    const lowerStem = stem.toLowerCase();
+    const representsFile = FILE_REPRESENTATIVE_TYPES.has(row.type);
 
     if (row.id === query) {
-        return { score: 1000, matchReason: "exact id" };
+        return { score: 1500, matchReason: "exact id" };
     }
 
     if (id.endsWith(`\\${q}`) || id === q) {
-        return { score: 980, matchReason: "exact qualified symbol" };
+        return { score: 1450, matchReason: "exact qualified symbol" };
     }
 
     if (id.endsWith(`::${q}`) || id.endsWith(`\\${q}`)) {
-        return { score: 900, matchReason: "exact symbol suffix" };
+        return { score: 1425, matchReason: "exact symbol suffix" };
     }
 
     if (id === q || name === q) {
-        return { score: 850, matchReason: "exact name" };
+        return { score: 1400, matchReason: "exact name" };
+    }
+
+    if (representsFile && normalizedFilePath === normalizedQueryPath) {
+        return { score: 1380, matchReason: "exact file path" };
+    }
+
+    if (
+        representsFile
+        &&
+        normalizedQueryPath.includes("/")
+        && normalizedFilePath.endsWith(`/${normalizedQueryPath}`)
+    ) {
+        return { score: 1360, matchReason: "exact file path suffix" };
+    }
+
+    if (representsFile && lowerBaseName === q) {
+        return { score: 1340, matchReason: "exact file name" };
+    }
+
+    if (representsFile && lowerStem === q) {
+        return { score: 1320, matchReason: "exact file stem" };
     }
 
     if (id.includes(q)) {
-        return { score: 700, matchReason: "id contains query" };
+        return { score: 900, matchReason: "id contains query" };
     }
 
     if (name.includes(q)) {
-        return { score: 600, matchReason: "name contains query" };
+        return { score: 850, matchReason: "name contains query" };
     }
 
     if (file.includes(q)) {
-        return { score: 400, matchReason: "file path contains query" };
+        return { score: 800, matchReason: "file path contains query" };
     }
 
     const tokens = q.split(/[\s/:.\\_-]+/).filter(token => token.length >= 2);
@@ -148,7 +208,7 @@ function scoreMatch(
     }
 
     if (tokenHits > 0) {
-        return { score: 200 + tokenHits * 50, matchReason: `${tokenHits} token(s) matched` };
+        return { score: 250 + tokenHits * 50, matchReason: `${tokenHits} token(s) matched` };
     }
 
     return { score: 0, matchReason: "weak match" };
@@ -177,7 +237,10 @@ function scoreMatchAgainstVariants(
             bonus -= 250;
         }
 
-        const totalScore = scored.score + bonus;
+        const baseScore = variant.source === "token"
+            ? Math.min(scored.score, TOKEN_VARIANT_SCORE_CAP)
+            : scored.score;
+        const totalScore = baseScore + bonus;
         if (totalScore > best.score) {
             best = {
                 score: totalScore,
@@ -422,6 +485,59 @@ function fetchSymbolRowsBySuffix(
     `).all(methodPattern, classPattern, ...(types ?? [])) as NodeRow[];
 }
 
+function fetchHighSignalSymbolRows(
+    db: SQLiteDatabase,
+    variants: QueryVariant[],
+    types: string[] | null,
+): NodeRow[] {
+    const strongVariants = variants.filter(variant => variant.source !== "token");
+    if (strongVariants.length === 0) {
+        return [];
+    }
+
+    const clauses: string[] = [];
+    const params: string[] = [];
+    for (const variant of strongVariants) {
+        const normalized = normalizeSearchPath(variant.text);
+        clauses.push(`(
+            LOWER(id) = LOWER(?)
+            OR LOWER(IFNULL(name, '')) = LOWER(?)
+            OR LOWER(IFNULL(file, '')) = LOWER(?)
+            OR LOWER(IFNULL(file, '')) LIKE LOWER(?) ESCAPE '\\'
+        )`);
+        params.push(normalized, normalized, normalized, `%/${escapeLike(normalized)}`);
+
+        if (!SOURCE_FILE_EXTENSIONS.some(extension => normalized.toLowerCase().endsWith(extension))) {
+            for (const extension of SOURCE_FILE_EXTENSIONS) {
+                const fileName = `${normalized}${extension}`;
+                clauses.push(`(
+                    LOWER(IFNULL(file, '')) = LOWER(?)
+                    OR LOWER(IFNULL(file, '')) LIKE LOWER(?) ESCAPE '\\'
+                )`);
+                params.push(fileName, `%/${escapeLike(fileName)}`);
+            }
+        }
+    }
+
+    const typeClause = types
+        ? `AND type IN (${types.map(() => "?").join(", ")})`
+        : "";
+
+    return db.prepare(`
+        SELECT id, type, name, file
+        FROM nodes
+        WHERE (${clauses.join(" OR ")})
+        ${typeClause}
+        ORDER BY id ASC
+        LIMIT 100
+    `).all(...params, ...(types ?? [])) as NodeRow[];
+}
+
+function prependUniqueRows(priorityRows: NodeRow[], rows: NodeRow[]): NodeRow[] {
+    const priorityIds = new Set(priorityRows.map(row => row.id));
+    return [...priorityRows, ...rows.filter(row => !priorityIds.has(row.id))];
+}
+
 function fetchSymbolRows(
     db: SQLiteDatabase,
     patterns: string[],
@@ -472,14 +588,15 @@ function runSearch(
         rows = fetchRouteRows(db, routePlan);
     } else {
         rows = fetchSymbolRows(db, buildLikePatterns(variants), types);
+        rows = prependUniqueRows(fetchHighSignalSymbolRows(db, variants, types), rows);
         if (looksLikePascalCaseSymbol(query)) {
             const suffixRows = fetchSymbolRowsBySuffix(db, query, types);
-            rows = [...suffixRows, ...rows.filter(row => !suffixRows.some(item => item.id === row.id))];
+            rows = prependUniqueRows(suffixRows, rows);
         } else if (query.includes("::")) {
             const classPart = query.split("::")[0] ?? "";
             if (looksLikePascalCaseSymbol(classPart) || classPart.includes("\\")) {
                 const suffixRows = fetchSymbolRowsBySuffix(db, query, types);
-                rows = [...suffixRows, ...rows.filter(row => !suffixRows.some(item => item.id === row.id))];
+                rows = prependUniqueRows(suffixRows, rows);
             }
         }
     }
