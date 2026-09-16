@@ -33,6 +33,7 @@ import {traitType} from "../astHandlers/node_types/trait";
 import {foreachStatementType} from "../astHandlers/node_types/foreachStatement";
 import {objectCreationExpressionType} from "../astHandlers/node_types/objectCreationExpression";
 import {applyClassPhpDocProperties} from "../semantic/phpDocPropertyTypes";
+import { enumType } from "../astHandlers/node_types/enum";
 
 export default function walk(rootNode: Parser.SyntaxNode, file:string, context: WalkContext):void {
     for(const child of rootNode.children) {
@@ -59,6 +60,16 @@ export default function walk(rootNode: Parser.SyntaxNode, file:string, context: 
                 resolveTraits(child, childContext);
                 resolveImplements(child, childContext);
                 applyClassPhpDocProperties(child, childContext);
+                break;
+            }
+            case "enum_declaration": {
+                const currentEnum = enumType(child, file, context);
+                childContext = {
+                    ...context,
+                    currentClass: currentEnum,
+                    currentInterface: undefined,
+                    classPropertyTypes: classPropertyTypesForClass(child, context, currentEnum),
+                };
                 break;
             }
             case "trait_declaration": {

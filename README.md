@@ -141,7 +141,7 @@ Full option reference: [`docs/commands.md`](docs/commands.md)
 
 ## What the graph contains
 
-- PHP classes, methods, traits, interfaces
+- PHP classes, methods, traits, interfaces, enums
 - Laravel routes (`ROUTES_TO` → controller methods) and route middleware (`USES_MIDDLEWARE`)
 - `CALLS`, `DEPENDS_ON`, field flow (`FLOWS_TO`, `ARGUMENT_TO`), Blade/Vue links
 - JavaScript / TypeScript modules and Vue components

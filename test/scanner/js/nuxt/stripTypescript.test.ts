@@ -59,6 +59,26 @@ export const useCheckoutStore = defineStore("checkout", {
     assert.ok(tsSourceParsesAsJs(source, tsParser));
 }
 
+function testStripsComplexGenericCallsAndFunctionParameterTypes(): void {
+    const source = `const props = withDefaults(
+  defineProps<{
+    customLabel?: (string) => string
+    placeholder?: unknown
+  }>(),
+  { options: () => [] }
+)
+
+const actual = await importOriginal<typeof import('vue')>()
+const component = (loader: () => Promise<unknown>) => loader()`;
+
+    const stripped = stripTypescript(source);
+
+    assert.match(stripped, /defineProps\(\)/);
+    assert.match(stripped, /importOriginal\(\)/);
+    assert.match(stripped, /\(loader\) => loader\(\)/);
+    assert.ok(tsSourceParsesAsJs(stripped, jsParser));
+}
+
 function testNuxtFixtureFilesWhenPresent(): void {
     const fixtures = [
         "apps/whiteLabel/utils/localeLoader.ts",
@@ -107,6 +127,9 @@ function run(): void {
 
     testStripsInterfacesAndInlineAssertions();
     console.log("  ✓ strips interfaces and inline assertions");
+
+    testStripsComplexGenericCallsAndFunctionParameterTypes();
+    console.log("  ✓ strips complex generic calls and function parameter types");
 
     testParseTsSourceForGraphReturnsTree();
     console.log("  ✓ parseTsSourceForGraph returns tree");

@@ -94,19 +94,78 @@ function removeSingleLineTypeAliases(source: string): string {
     );
 }
 
-function stripGenericInstantiations(source: string): string {
-    let result = source;
-    const pattern = /([A-Za-z_$][\w$]*)<(?:[^<>]|<[^<>]*>)*>/g;
+function findGenericClose(source: string, openIndex: number): number | undefined {
+    let depth = 0;
+    let quote: string | undefined;
 
-    for (let pass = 0; pass < 8; pass += 1) {
-        const next = result.replace(pattern, "$1");
-        if (next === result) {
-            break;
+    for (let index = openIndex; index < source.length; index += 1) {
+        const char = source[index]!;
+
+        if (quote) {
+            if (char === "\\") {
+                index += 1;
+            } else if (char === quote) {
+                quote = undefined;
+            }
+            continue;
         }
-        result = next;
+
+        if (char === "'" || char === '"' || char === "`") {
+            quote = char;
+            continue;
+        }
+
+        if (char === "<") {
+            depth += 1;
+            continue;
+        }
+
+        // The greater-than sign in a function type arrow is not a generic
+        // delimiter, e.g. defineProps<{ label: (x: string) => string }>().
+        if (char === ">" && source[index - 1] !== "=") {
+            depth -= 1;
+            if (depth === 0) {
+                return index;
+            }
+        }
     }
 
-    return result;
+    return undefined;
+}
+
+function stripGenericInstantiations(source: string): string {
+    const pattern = /[A-Za-z_$][\w$]*\s*</g;
+    let result = "";
+    let cursor = 0;
+    let match = pattern.exec(source);
+
+    while (match) {
+        const openIndex = source.indexOf("<", match.index);
+        const closeIndex = findGenericClose(source, openIndex);
+
+        if (closeIndex === undefined) {
+            break;
+        }
+
+        let nextIndex = closeIndex + 1;
+        while (/\s/.test(source[nextIndex] ?? "")) {
+            nextIndex += 1;
+        }
+
+        // Only strip type arguments on calls. This avoids rewriting ordinary
+        // JavaScript comparisons such as `left < middle > right`.
+        if (source[nextIndex] === "(") {
+            result += source.slice(cursor, openIndex);
+            cursor = closeIndex + 1;
+            pattern.lastIndex = cursor;
+        } else {
+            pattern.lastIndex = openIndex + 1;
+        }
+
+        match = pattern.exec(source);
+    }
+
+    return result + source.slice(cursor);
 }
 
 function stripInlineObjectTypeAnnotations(source: string): string {
@@ -158,6 +217,10 @@ function stripColonTypeAnnotations(source: string): string {
 function stripTypeAnnotations(source: string): string {
     let result = source;
 
+    result = result.replace(
+        /(\(\s*)([A-Za-z_$][\w$]*)\s*\??:\s*\([^)]*\)\s*=>\s*[A-Za-z_$][\w$]*(?:\s*<[^<>]*>)?(?:\[\])?/g,
+        "$1$2"
+    );
     result = stripArrowFunctionReturnTypes(result);
     result = stripInlineObjectParameterTypes(result);
     result = result.replace(/\)\s*:\s*[^{;]+(\s*\{)/g, ")$1");

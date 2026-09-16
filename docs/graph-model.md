@@ -36,6 +36,7 @@ SlidePresetsController::index
 |---|---|
 | `class` | PHP class |
 | `interface` | PHP interface |
+| `enum` | PHP enum |
 | `method` | Method on class/interface |
 | `api_endpoint` | Laravel route endpoint |
 | `middleware` | Middleware attached to a Laravel route |
