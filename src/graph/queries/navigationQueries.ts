@@ -464,9 +464,52 @@ export function findOutgoingEdgesByType(
     }));
 }
 
+const ABSTRACT_NAME_PATTERN = /(?:^|\\|\b)(?:Abstract|Base)[A-Z]|(?:Interface|Contract|Contracts)$/;
+
+function classIdOf(methodId: string): string | null {
+    const separator = methodId.lastIndexOf("::");
+    return separator === -1 ? null : methodId.slice(0, separator);
+}
+
+export function isAbstractCallTarget(db: SQLiteDatabase, methodId: string): boolean {
+    const classId = classIdOf(methodId);
+    if (!classId) {
+        return false;
+    }
+
+    const classNode = db.prepare(`
+        SELECT type FROM nodes WHERE id = ? LIMIT 1
+    `).get(classId) as { type: string } | undefined;
+
+    if (classNode?.type === "interface" || classNode?.type === "trait") {
+        return true;
+    }
+
+    const implemented = db.prepare(`
+        SELECT 1 FROM edges WHERE type = 'IMPLEMENTS' AND to_id = ? LIMIT 1
+    `).get(classId) as unknown;
+
+    if (implemented) {
+        return true;
+    }
+
+    return ABSTRACT_NAME_PATTERN.test(classId);
+}
+
+function sharedNamespaceDepth(left: string, right: string): number {
+    const leftParts = left.split("\\");
+    const rightParts = right.split("\\");
+    let shared = 0;
+    while (shared < leftParts.length && shared < rightParts.length && leftParts[shared] === rightParts[shared]) {
+        shared += 1;
+    }
+    return shared;
+}
+
 export function resolveInterfaceMethodImplementation(
     db: SQLiteDatabase,
     interfaceMethodId: string,
+    options?: { preferNear?: string },
 ): string | null {
     const separator = interfaceMethodId.lastIndexOf("::");
     if (separator === -1) {
@@ -476,29 +519,41 @@ export function resolveInterfaceMethodImplementation(
     const interfaceClassId = interfaceMethodId.slice(0, separator);
     const methodName = interfaceMethodId.slice(separator + 2);
 
-    const implementors = db.prepare(`
+    const candidates = db.prepare(`
         SELECT from_id
         FROM edges
-        WHERE type = 'IMPLEMENTS'
+        WHERE type IN ('IMPLEMENTS', 'EXTENDS')
           AND to_id = ?
         ORDER BY from_id ASC
     `).all(interfaceClassId) as Array<{ from_id: string }>;
 
-    for (const { from_id: classId } of implementors) {
-        const candidate = `${classId}::${methodName}`;
-        const exists = db.prepare(`
-            SELECT id FROM nodes WHERE id = ? AND type = 'method' LIMIT 1
-        `).get(candidate) as { id: string } | undefined;
+    const methodExists = db.prepare(`
+        SELECT id FROM nodes WHERE id = ? AND type = 'method' LIMIT 1
+    `);
 
-        if (exists) {
-            return candidate;
-        }
+    const resolved = candidates
+        .map(({ from_id: classId }) => `${classId}::${methodName}`)
+        .filter(candidate => Boolean(methodExists.get(candidate)));
+
+    if (resolved.length === 0) {
+        return null;
     }
 
-    return null;
+    if (!options?.preferNear || resolved.length === 1) {
+        return resolved[0]!;
+    }
+
+    const near = options.preferNear;
+    return resolved
+        .map(candidate => ({ candidate, shared: sharedNamespaceDepth(candidate, near) }))
+        .sort((left, right) => right.shared - left.shared || left.candidate.localeCompare(right.candidate))
+        [0]!.candidate;
 }
 
-export function preferConcreteCallTargets<T extends { id: string }>(calls: T[]): T[] {
+export function preferConcreteCallTargets<T extends { id: string }>(
+    calls: T[],
+    isAbstract: (id: string) => boolean = id => id.includes("Interface"),
+): T[] {
     const byMethod = new Map<string, T[]>();
 
     for (const call of calls) {
@@ -510,8 +565,8 @@ export function preferConcreteCallTargets<T extends { id: string }>(calls: T[]):
 
     const result: T[] = [];
     for (const group of byMethod.values()) {
-        const interfaces = group.filter(item => item.id.includes("Interface"));
-        const concretes = group.filter(item => !item.id.includes("Interface"));
+        const interfaces = group.filter(item => isAbstract(item.id));
+        const concretes = group.filter(item => !isAbstract(item.id));
 
         if (interfaces.length > 0 && concretes.length > 0) {
             result.push(...concretes);

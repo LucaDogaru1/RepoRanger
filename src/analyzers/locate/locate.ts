@@ -1,12 +1,24 @@
 import Database from "better-sqlite3";
 import { findNode, type GraphNodeRow } from "../../graph/queries/GraphQueries";
+import { isDataLayerNodeId } from "../../graph/queries/callChainQueries";
+import { readGraphFreshness, type GraphFreshness } from "../../graph/queries/graphFreshness";
 import { shortNavigationLabel } from "../../graph/queries/navigationQueries";
+import { findRelatedTests, type RelatedTestRow } from "../../graph/queries/relatedTests";
 import {
     searchNodes,
     type SearchKind,
     type SearchMatch,
 } from "../../graph/queries/searchNodes";
+import { classifyFileRole, fileRolePenalty } from "../../shared/classification/fileRole";
 import { buildTrace, type TraceResult } from "../trace/trace";
+import { scoreConfidence, type LocateConfidence } from "./confidence";
+import { findDataLayerContinuation } from "./dataLayerContinuation";
+import {
+    applyOutputBudget,
+    DEFAULT_MAX_TOKENS,
+    type BudgetSection,
+} from "./outputBudget";
+import { formatLineRange, readSourceSnippet } from "./sourceSnippet";
 
 type SQLiteDatabase = InstanceType<typeof Database>;
 
@@ -15,6 +27,10 @@ export interface LocateOptions {
     depth?: number;
     limit?: number;
     maxFiles?: number;
+    sourceRoot?: string;
+    dbPath?: string;
+    maxTokens?: number;
+    includeTests?: boolean;
 }
 
 export interface LocateFile {
@@ -23,6 +39,8 @@ export interface LocateFile {
     endRow: number | null;
     nodeId: string;
     reason: string;
+    role: ReturnType<typeof classifyFileRole>;
+    snippet?: string[];
 }
 
 export interface LocateEntry {
@@ -39,8 +57,11 @@ export interface LocateResult {
     middleware: string[];
     flow: string[];
     files: LocateFile[];
+    tests: RelatedTestRow[];
     coverage: TraceResult["coverage"];
     warnings: string[];
+    graph: GraphFreshness;
+    confidence: LocateConfidence;
 }
 
 function findRouteMiddleware(db: SQLiteDatabase, endpointId: string): string[] {
@@ -60,7 +81,7 @@ export type LocateBuildResult =
     | { ok: true; data: LocateResult }
     | { ok: false; error: string };
 
-type RankedFile = LocateFile & { score: number; order: number };
+type RankedFile = LocateFile & { score: number; order: number; role: LocateFile["role"] };
 
 function resolveMatch(
     db: SQLiteDatabase,
@@ -122,11 +143,7 @@ function compactLabel(nodeId: string): string {
 
 function compactLocation(node: GraphNodeRow | undefined): string | null {
     if (!node?.file) return null;
-    if (node.start_row === null) return node.file;
-    if (node.end_row === null || node.end_row === node.start_row) {
-        return `${node.file}:${node.start_row}`;
-    }
-    return `${node.file}:${node.start_row}-${node.end_row}`;
+    return formatLineRange(node.file, node.start_row, node.end_row);
 }
 
 function semanticBonus(node: GraphNodeRow): number {
@@ -185,20 +202,27 @@ function rankFiles(
     matchedNode: GraphNodeRow,
     trace: TraceResult,
     maxFiles: number,
+    continuation: ReturnType<typeof findDataLayerContinuation>,
 ): LocateFile[] {
     const candidates: RankedFile[] = [];
     let order = 0;
+    const matchedRole = classifyFileRole(matchedNode.file);
 
     const add = (nodeId: string, reason: string, score: number): void => {
         const node = findNearestSourceNode(db, nodeId);
         if (!node) return;
+        const role = classifyFileRole(node.file);
+        const penalty = node.id === matchedNode.id || matchedRole !== "source"
+            ? 0
+            : fileRolePenalty(node.file);
         candidates.push({
             file: node.file,
             startRow: node.start_row,
             endRow: node.end_row,
             nodeId: node.id,
             reason,
-            score: score + semanticBonus(node),
+            role,
+            score: score + semanticBonus(node) - penalty,
             order: order++,
         });
     };
@@ -237,6 +261,9 @@ function rankFiles(
     for (const edge of trace.navigation.fieldFlowsOut) {
         add(edge.to, "field flow target", 1020);
     }
+    for (const call of continuation) {
+        add(call.id, `data layer via ${compactLabel(call.seedId)}`, 900);
+    }
 
     const bestByFile = new Map<string, RankedFile>();
     for (const candidate of candidates) {
@@ -257,6 +284,7 @@ function buildFlow(
     trace: TraceResult,
     bridge: LocateResult["httpBridge"],
     middleware: string[],
+    continuation: ReturnType<typeof findDataLayerContinuation>,
 ): string[] {
     const lines: string[] = [];
     if (bridge) {
@@ -279,6 +307,9 @@ function buildFlow(
     }
     for (const edge of trace.navigation.fieldFlowsOut.slice(0, 3)) {
         lines.push(`  → ${compactLabel(edge.to)} [${edge.type}]`);
+    }
+    for (const call of continuation) {
+        lines.push(`    → ${compactLabel(call.id)} [data layer, +${call.depth} from ${compactLabel(call.seedId)}]`);
     }
     return lines;
 }
@@ -330,6 +361,32 @@ export function buildLocate(
     }
     warnings.push(...trace.navigation.warnings.slice(0, Math.max(0, 2 - warnings.length)));
 
+    const reachesDataLayer = trace.outgoingCalls.some(call =>
+        isDataLayerNodeId(call.resolvedTo ?? call.id));
+    const continuation = reachesDataLayer
+        ? []
+        : findDataLayerContinuation(db, deepestCallIds(trace), { extraDepth: 2, limit: 2 });
+
+    const files = rankFiles(db, matchedNode, trace, maxFiles, continuation);
+    const tests = options?.includeTests === false
+        ? []
+        : findRelatedTests(db, testAnchorIds(matchedNode, trace, files), 3);
+
+    if (options?.sourceRoot) {
+        attachSnippets(files, options.sourceRoot);
+    }
+
+    const graph = readGraphFreshness(db, options?.dbPath);
+    const confidence = scoreConfidence({
+        query,
+        match: resolved.match,
+        fileCount: files.length,
+        hasEntry: Boolean(entryNode) || trace.coverage.complete.includes("entry"),
+        missingCoverage: trace.coverage.missing,
+        ambiguous: Boolean(ambiguous),
+        freshness: graph,
+    });
+
     return {
         ok: true,
         data: {
@@ -339,44 +396,130 @@ export function buildLocate(
             resolvesTo: trace.resolvesTo,
             httpBridge,
             middleware,
-            flow: buildFlow(matchedNode, trace, httpBridge, middleware),
-            files: rankFiles(db, matchedNode, trace, maxFiles),
+            flow: buildFlow(matchedNode, trace, httpBridge, middleware, continuation),
+            files,
+            tests,
             coverage: trace.coverage,
             warnings,
+            graph,
+            confidence,
         },
     };
 }
 
-function formatLocateFile(file: LocateFile): string {
-    const location = file.startRow === null
-        ? file.file
-        : file.endRow === null || file.endRow === file.startRow
-            ? `${file.file}:${file.startRow}`
-            : `${file.file}:${file.startRow}-${file.endRow}`;
-    return `${location} — ${file.reason}`;
+function deepestCallIds(trace: TraceResult): string[] {
+    if (trace.outgoingCalls.length === 0) {
+        return trace.resolvesTo ? [trace.resolvesTo] : [trace.analysisNodeId];
+    }
+
+    const maxDepth = Math.max(...trace.outgoingCalls.map(call => call.depth));
+    return trace.outgoingCalls
+        .filter(call => call.depth >= maxDepth - 1)
+        .map(call => call.resolvedTo ?? call.id)
+        .slice(0, 4);
 }
 
-export function renderLocate(data: LocateResult): string {
-    const lines = [
+function testAnchorIds(
+    matchedNode: GraphNodeRow,
+    trace: TraceResult,
+    files: LocateFile[],
+): string[] {
+    const ids = [matchedNode.id];
+    if (matchedNode.parent) ids.push(matchedNode.parent);
+    if (trace.resolvesTo) {
+        ids.push(trace.resolvesTo);
+        const classId = trace.resolvesTo.split("::")[0];
+        if (classId) ids.push(classId);
+    }
+    for (const file of files) {
+        if (file.role !== "source") continue;
+        ids.push(file.nodeId);
+        const classId = file.nodeId.split("::")[0];
+        if (classId) ids.push(classId);
+    }
+    return ids;
+}
+
+function attachSnippets(files: LocateFile[], sourceRoot: string): void {
+    files.slice(0, 3).forEach((file, index) => {
+        const snippet = readSourceSnippet(file.file, file.startRow, {
+            sourceRoot,
+            maxLines: index === 0 ? 3 : 2,
+        });
+        if (snippet) {
+            file.snippet = snippet;
+        }
+    });
+}
+
+function formatLocateFile(file: LocateFile): string {
+    const location = formatLineRange(file.file, file.startRow, file.endRow);
+    const role = file.role === "source" ? "" : ` [${file.role}]`;
+    return `${location}${role} — ${file.reason}`;
+}
+
+export function renderLocate(data: LocateResult, maxTokens: number = DEFAULT_MAX_TOKENS): string {
+    const header: string[] = [
         `# Locate: ${data.query}`,
         `Match: ${data.match.id} (${data.match.type}; ${data.match.matchReason}; score ${data.match.score})`,
+        `Graph: ${data.graph.summary}`,
     ];
-
     if (data.entry) {
-        lines.push(`Entry: ${compactLabel(data.entry.id)}${data.entry.location ? ` — ${data.entry.location}` : ""}`);
+        header.push(`Entry: ${compactLabel(data.entry.id)}${data.entry.location ? ` — ${data.entry.location}` : ""}`);
     }
-    lines.push("", "Flow:", ...data.flow.map(line => `  ${line}`));
-    lines.push("", `Inspect first (${data.files.length}/5):`);
+
+    const inspect: string[] = ["", `Inspect first (${data.files.length}/5):`];
     if (data.files.length === 0) {
-        lines.push("  (no source locations recorded)");
+        inspect.push("  (no source locations recorded)");
     } else {
-        data.files.forEach((file, index) => lines.push(`  ${index + 1}. ${formatLocateFile(file)}`));
+        data.files.forEach((file, index) => {
+            inspect.push(`  ${index + 1}. ${formatLocateFile(file)}`);
+            for (const snippetLine of file.snippet ?? []) {
+                inspect.push(`       ${snippetLine}`);
+            }
+        });
     }
+
+    const tests: string[] = data.tests.length > 0
+        ? [
+            "",
+            `Tests (${data.tests.length}):`,
+            ...data.tests.map(test =>
+                `  ${formatLineRange(test.file, test.startRow, test.endRow)} — ${test.reason}`),
+        ]
+        : [];
+
+    const flow: string[] = ["", "Flow:", ...data.flow.map(line => `  ${line}`)];
 
     const { complete, partial, missing } = data.coverage;
-    lines.push("", "Coverage:", `  known: ${complete.join(", ") || "none"}`);
-    if (partial.length > 0) lines.push(`  partial: ${partial.join(", ")}`);
-    if (missing.length > 0) lines.push(`  missing: ${missing.join(", ")}`);
-    for (const warning of data.warnings) lines.push(`  warning: ${warning}`);
-    return `${lines.join("\n")}\n`;
+    const coverage: string[] = ["", "Coverage:", `  known: ${complete.join(", ") || "none"}`];
+    if (partial.length > 0) coverage.push(`  partial: ${partial.join(", ")}`);
+    if (missing.length > 0) coverage.push(`  missing: ${missing.join(", ")}`);
+
+    const verdict: string[] = [
+        "",
+        `Confidence: ${data.confidence.level}${
+            data.confidence.reasons.length > 0 ? ` (${data.confidence.reasons.join("; ")})` : ""
+        }`,
+    ];
+    if (data.confidence.fallback) {
+        verdict.push(data.confidence.level === "low"
+            ? `Low confidence — use rg: ${data.confidence.fallback}`
+            : `Verify with rg: ${data.confidence.fallback}`);
+    }
+
+    const warnings: string[] = data.warnings.map(warning => `  warning: ${warning}`);
+
+    const sections: BudgetSection[] = [
+        { priority: 100, lines: header, keepLines: 3, droppable: false },
+        { priority: 90, lines: verdict, keepLines: 2, droppable: false },
+        { priority: 80, lines: inspect, keepLines: 2 },
+        { priority: 60, lines: tests, keepLines: 2 },
+        { priority: 50, lines: flow, keepLines: 2 },
+        { priority: 40, lines: coverage, keepLines: 2 },
+        { priority: 10, lines: warnings },
+    ];
+
+    const { text, trimmed } = applyOutputBudget(sections, maxTokens);
+    return trimmed ? `${text}\n  (output trimmed to fit ${maxTokens} tokens)\n` : `${text}\n`;
 }

@@ -9,7 +9,8 @@ import writeGraphJson from "../persistence/writeGraphJson";
 import writeGraphSqlite from "../persistence/writeGraphSqlite";
 import chalk from "chalk";
 import { loadScanConfig } from "../shared/config/scanRuntime";
-import { DEFAULT_SCAN_IGNORE, parseScanCliOptions } from "../shared/utils/scanCli";
+import { parseScanCliOptions, scanIgnoreList } from "../shared/utils/scanCli";
+import { collectGraphMeta } from "../shared/utils/graphMetaSource";
 import { loadGraphJson, mergeGraphs } from "../persistence/loadGraphJson";
 import { graph, resetGraph } from "../graph/graph";
 import {
@@ -25,12 +26,15 @@ const {
     language,
     mergeExistingGraph,
     graphJsonPath,
+    includeTests,
 } = parseScanCliOptions(process.argv.slice(2));
 
 const multiRoot = rootDirs.length > 1;
+const foldersToIgnore = scanIgnoreList({ includeTests });
 
 console.log("scan roots:", rootDirs.join(", "));
 console.log("language:", language);
+console.log("tests:", includeTests ? "scanned" : "excluded (--exclude-tests)");
 console.log(chalk.blue.bold("🔍 Starting directory scan...\n"));
 
 resetGraph();
@@ -66,7 +70,7 @@ if (language === "php" || language === "both") {
         const prefix = pathPrefixForRoot(rootDir);
         const discoverProgress = createScanProgress({ label: "Finding PHP files" });
         discoverProgress.start();
-        const files = prefixRelativePaths(scanPhpFiles(rootDir, DEFAULT_SCAN_IGNORE), prefix);
+        const files = prefixRelativePaths(scanPhpFiles(rootDir, foldersToIgnore), prefix);
         discoverProgress.done(chalk.cyan(`PHP files (${rootDir}): ${files.length}`));
         phpFiles.push(...files);
     }
@@ -116,7 +120,7 @@ if (language === "js" || language === "both") {
 
         const discoverProgress = createScanProgress({ label: "Finding JS files" });
         discoverProgress.start();
-        const jsFiles = prefixRelativePaths(scanJsFiles(rootDir, DEFAULT_SCAN_IGNORE), prefix);
+        const jsFiles = prefixRelativePaths(scanJsFiles(rootDir, foldersToIgnore), prefix);
         discoverProgress.done(chalk.cyan(`JS files (${rootDir}): ${jsFiles.length}`));
 
         processJsFiles(jsFiles, jsParser, {
@@ -149,6 +153,12 @@ if (outputMode === "json" || outputMode === "both") {
 if (outputMode === "sqlite" || outputMode === "both") {
     const writeProgress = createScanProgress({ label: "Writing SQLite" });
     writeProgress.start();
-    writeGraphSqlite(sqlitePath);
+    writeGraphSqlite(sqlitePath, collectGraphMeta({
+        rootDirs,
+        includeTests,
+        language,
+        nodeCount: graph.nodes.size,
+        edgeCount: graph.edges.size,
+    }));
     writeProgress.done(chalk.green(`Wrote ${sqlitePath}`));
 }

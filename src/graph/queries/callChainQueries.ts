@@ -6,6 +6,7 @@ import {
 } from "./GraphQueries";
 import {
     filterFrameworkNoise,
+    isAbstractCallTarget,
     preferConcreteCallTargets,
     resolveInterfaceMethodImplementation,
 } from "./navigationQueries";
@@ -28,9 +29,12 @@ export interface CallChainQueryOptions {
     perHopLimit?: number;
 }
 
-function resolveCallTraversalTarget(db: SQLiteDatabase, call: CallRow): string {
-    if (call.id.includes("Interface")) {
-        return resolveInterfaceMethodImplementation(db, call.id) ?? call.id;
+function resolveCallTraversalTarget(db: SQLiteDatabase, call: CallRow, callerId: string): string {
+    if (isAbstractCallTarget(db, call.id)) {
+        const implementation = resolveInterfaceMethodImplementation(db, call.id, { preferNear: callerId });
+        if (implementation) {
+            return implementation;
+        }
     }
 
     if (!call.file) {
@@ -38,6 +42,53 @@ function resolveCallTraversalTarget(db: SQLiteDatabase, call: CallRow): string {
     }
 
     return call.id;
+}
+
+const LAYER_PRIORITY: Array<{ pattern: RegExp; weight: number }> = [
+    { pattern: /Quer(?:y|ies)|Repositor(?:y|ies)|Finder|Dao|Builder|Persist/i, weight: 100 },
+    { pattern: /Service|UseCase|Action|Handler|Interactor|Manager/i, weight: 80 },
+    { pattern: /Factory|Provider|Resolver/i, weight: 70 },
+    { pattern: /Generator|Transformer|Resource|Serializer|Presenter/i, weight: 60 },
+    { pattern: /Dto|Request|Validator|Rule/i, weight: 50 },
+];
+
+const TRIVIAL_ACCESSOR = /::(?:get|set|is|has|to|from|with)[A-Z_]?\w*$/;
+
+export function isDataLayerNodeId(nodeId: string): boolean {
+    const className = nodeId.split("::")[0] ?? nodeId;
+    return LAYER_PRIORITY[0]!.pattern.test(className);
+}
+
+function layerPriority(nodeId: string): number {
+    const className = nodeId.split("::")[0] ?? nodeId;
+    let weight = 20;
+
+    for (const layer of LAYER_PRIORITY) {
+        if (layer.pattern.test(className)) {
+            weight = layer.weight;
+            break;
+        }
+    }
+
+    if (TRIVIAL_ACCESSOR.test(nodeId)) {
+        weight -= 15;
+    }
+
+    return weight;
+}
+
+function selectWithinBudget(calls: CallChainRow[], cap: number): { selected: CallChainRow[]; dropped: boolean } {
+    if (calls.length <= cap) {
+        return { selected: calls, dropped: false };
+    }
+
+    const selected = [...calls]
+        .sort((left, right) =>
+            layerPriority(right.id) - layerPriority(left.id) || left.id.localeCompare(right.id))
+        .slice(0, cap)
+        .sort((left, right) => left.id.localeCompare(right.id));
+
+    return { selected, dropped: true };
 }
 
 export function findOutgoingCallChain(
@@ -60,68 +111,90 @@ export function findOutgoingCallChain(
 
     type QueueItem = {
         nodeId: string;
-        depth: number;
+        traversalId: string;
         path: Set<string>;
     };
 
-    const queue: QueueItem[] = [{
+    let frontier: QueueItem[] = [{
         nodeId: startId,
-        depth: 0,
+        traversalId: startId,
         path: new Set([startId]),
     }];
 
-    while (queue.length > 0 && results.length < totalLimit) {
-        const current = queue.shift()!;
-        if (current.depth >= maxDepth) {
-            continue;
-        }
+    const RESERVE_PER_REMAINING_DEPTH = 2;
 
-        const rawCalls = findOutgoingCalls(db, current.nodeId, {
-            includeInterfaceResolved,
-            limit: perHopLimit,
-        });
-
-        const calls = filterFrameworkNoise(preferConcreteCallTargets(rawCalls));
-
-        if (rawCalls.length >= perHopLimit) {
+    for (let depth = 0; depth < maxDepth && frontier.length > 0; depth += 1) {
+        const remaining = totalLimit - results.length;
+        if (remaining <= 0) {
             truncated = true;
+            break;
         }
 
-        for (const call of calls) {
-            if (results.length >= totalLimit) {
-                truncated = true;
-                break;
-            }
+        const remainingDepths = maxDepth - depth - 1;
+        const reserve = Math.min(remaining - 1, remainingDepths * RESERVE_PER_REMAINING_DEPTH);
+        const levelCap = Math.max(1, remaining - Math.max(0, reserve));
 
-            const traversalId = resolveCallTraversalTarget(db, call);
-            if (current.path.has(traversalId)) {
-                continue;
-            }
+        const levelCalls: Array<CallChainRow & { item: QueueItem; traversalTarget: string }> = [];
 
-            if (seenTargets.has(call.id)) {
-                continue;
-            }
-
-            seenTargets.add(call.id);
-            results.push({
-                ...call,
-                depth: current.depth + 1,
+        for (const current of frontier) {
+            const rawCalls = findOutgoingCalls(db, current.traversalId, {
+                includeInterfaceResolved,
+                limit: perHopLimit,
             });
 
-            if (current.depth + 1 < maxDepth) {
-                const nextPath = new Set(current.path);
-                nextPath.add(traversalId);
-                queue.push({
-                    nodeId: traversalId,
-                    depth: current.depth + 1,
-                    path: nextPath,
+            if (rawCalls.length >= perHopLimit) {
+                truncated = true;
+            }
+
+            const calls = filterFrameworkNoise(preferConcreteCallTargets(
+                rawCalls,
+                id => isAbstractCallTarget(db, id),
+            ));
+
+            for (const call of calls) {
+                const traversalTarget = resolveCallTraversalTarget(db, call, current.traversalId);
+                if (current.path.has(traversalTarget) || seenTargets.has(call.id)) {
+                    continue;
+                }
+
+                seenTargets.add(call.id);
+                levelCalls.push({
+                    ...call,
+                    depth: depth + 1,
+                    item: current,
+                    traversalTarget,
                 });
             }
         }
-    }
 
-    if (results.length >= totalLimit && queue.length > 0) {
-        truncated = true;
+        const { selected, dropped } = selectWithinBudget(
+            levelCalls.sort((left, right) => left.id.localeCompare(right.id)),
+            levelCap,
+        );
+        if (dropped) {
+            truncated = true;
+        }
+
+        const nextFrontier: QueueItem[] = [];
+        for (const call of selected as Array<CallChainRow & { item: QueueItem; traversalTarget: string }>) {
+            results.push({
+                id: call.id,
+                callType: call.callType,
+                via: call.via,
+                file: call.file,
+                depth: call.depth,
+            });
+
+            const nextPath = new Set(call.item.path);
+            nextPath.add(call.traversalTarget);
+            nextFrontier.push({
+                nodeId: call.id,
+                traversalId: call.traversalTarget,
+                path: nextPath,
+            });
+        }
+
+        frontier = nextFrontier;
     }
 
     return { calls: results, truncated };

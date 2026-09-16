@@ -14,6 +14,7 @@ import {
 import {
     findRouteControllerMethod,
     formatGraphEntryLabel,
+    isAbstractCallTarget,
     resolveInterfaceMethodImplementation,
     shortNavigationLabel,
     type GraphEntryRow,
@@ -97,14 +98,15 @@ function buildOutgoingCalls(
     });
 
     return {
-        calls: chain.calls.map(call => mapCallChainRow(db, call)),
+        calls: chain.calls.map(call => mapCallChainRow(db, call, analysisNodeId)),
         truncated: chain.truncated,
     };
 }
 
-function mapCallChainRow(db: SQLiteDatabase, call: CallChainRow): TraceCallRow {
-    const resolvedTo = call.id.includes("Interface")
-        ? resolveInterfaceMethodImplementation(db, call.id) ?? undefined
+function mapCallChainRow(db: SQLiteDatabase, call: CallChainRow, callerId: string): TraceCallRow {
+    const resolvedTo = isAbstractCallTarget(db, call.id)
+        ? resolveInterfaceMethodImplementation(db, call.id, { preferNear: callerId })
+            ?? (call.file ? undefined : resolveMethodThroughInheritance(db, call.id) ?? undefined)
         : !call.file
             ? resolveMethodThroughInheritance(db, call.id) ?? undefined
             : undefined;

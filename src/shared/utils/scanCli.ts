@@ -3,11 +3,21 @@ import { getOptionValue } from "../../cli/shared/cliArgs";
 import { OutputMode, ScanCliOptions, ScanLanguage } from "../types/scanCli";
 
 export const DEFAULT_SCAN_IGNORE = [
-    "vendor", "node_modules", "tests", "test", "cache", "logs",
-    "bin", "bootstrap", "build", "database", "docker", "docs",
+    "vendor", "node_modules", "cache", "logs",
+    "bin", "bootstrap", "build", "docker", "docs",
     "storage", "artisan", "composer.json", "composer.lock", "package.json", "package-lock.json",
     "boost.json", "certs",
 ];
+
+export const TEST_SCAN_IGNORE = [
+    "test", "tests", "__tests__", "__test__", "spec", "specs", "e2e", "cypress", "playwright", "k6",
+];
+
+export function scanIgnoreList(options: { includeTests: boolean }): string[] {
+    return options.includeTests
+        ? DEFAULT_SCAN_IGNORE
+        : [...DEFAULT_SCAN_IGNORE, ...TEST_SCAN_IGNORE];
+}
 
 function parseLanguage(value: string | undefined): ScanLanguage {
     if (value === "php" || value === "js" || value === "both") {
@@ -23,6 +33,7 @@ export function parseScanCliOptions(argv: string[]): ScanCliOptions {
     let language: ScanLanguage = "both";
     let mergeExistingGraph = true;
     let graphJsonPath = "Graph.json";
+    const includeTests = !argv.includes("--exclude-tests");
 
     const outputModeArg = getOptionValue(argv, "--output") as OutputMode | undefined;
     if (outputModeArg === "json" || outputModeArg === "sqlite" || outputModeArg === "both") {
@@ -63,5 +74,6 @@ export function parseScanCliOptions(argv: string[]): ScanCliOptions {
         language,
         mergeExistingGraph,
         graphJsonPath,
+        includeTests,
     };
 }

@@ -4,7 +4,8 @@ import path from "node:path";
 import { graph } from "../graph/graph";
 
 export default function writeGraphSqlite(
-    databasePath: string = "sqlite/Graph.sqlite"
+    databasePath: string = "sqlite/Graph.sqlite",
+    meta?: Record<string, string>,
 ): void {
     const dir = path.dirname(databasePath);
 
@@ -17,6 +18,12 @@ export default function writeGraphSqlite(
     db.exec(`
         DROP TABLE IF EXISTS nodes;
         DROP TABLE IF EXISTS edges;
+        DROP TABLE IF EXISTS graph_meta;
+
+        CREATE TABLE graph_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
 
         CREATE TABLE nodes (
             id TEXT PRIMARY KEY,
@@ -54,10 +61,23 @@ export default function writeGraphSqlite(
         CREATE INDEX idx_nodes_parent ON nodes(parent);
         CREATE INDEX idx_nodes_file ON nodes(file);
         CREATE INDEX idx_nodes_scope ON nodes(scope);
+
+        CREATE INDEX idx_nodes_type_visibility
+        ON nodes(type, visibility);
+
         CREATE INDEX idx_edges_type ON edges(type);
         CREATE INDEX idx_edges_from ON edges(from_id);
         CREATE INDEX idx_edges_to ON edges(to_id);
         CREATE INDEX idx_edges_via ON edges(via);
+
+        CREATE INDEX idx_edges_type_from
+        ON edges(type, from_id);
+
+        CREATE INDEX idx_edges_type_to
+        ON edges(type, to_id);
+
+        CREATE INDEX idx_edges_type_call_to
+        ON edges(type, call_type, to_id);
     `);
 
     const insertNode = db.prepare(`
@@ -124,7 +144,15 @@ export default function writeGraphSqlite(
         );
     `);
 
+    const insertMeta = db.prepare(`
+        INSERT OR REPLACE INTO graph_meta (key, value) VALUES (@key, @value);
+    `);
+
     const transaction = db.transaction(() => {
+        for (const [key, value] of Object.entries(meta ?? {})) {
+            insertMeta.run({ key, value });
+        }
+
         for (const node of graph.nodes.values()) {
             insertNode.run({
                 id: node.id,

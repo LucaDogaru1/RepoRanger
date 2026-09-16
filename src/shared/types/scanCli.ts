@@ -9,4 +9,5 @@ export interface ScanCliOptions {
     language: ScanLanguage;
     mergeExistingGraph: boolean;
     graphJsonPath: string;
+    includeTests: boolean;
 }
