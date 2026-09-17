@@ -8,7 +8,8 @@ Use it after `find` (and optionally `trace`) for callers, routes, field flow, im
 
 - target metadata and location (`resolves to` when starting from a route)
 - upstream consumers (routes, blade, call-chain) and callees
-- **graph navigation**: routes, request/field intake, field flow, validation, persistence, config refs
+- resolved frontend `HTTP_REQUEST` paths into backend routes and controllers
+- **graph navigation**: routes, HTTP downstream, request/field intake, field flow, validation, persistence, config refs
 - **coverage warnings** when the graph is incomplete for this symbol
 - dependencies and inheritance
 - architecture issues and cycles (scoped to the target)

@@ -2,7 +2,7 @@
 
 `trace` is a **compact end-to-end flow report** for one symbol (class, method, route, or fuzzy name).
 
-Use it after `find` when you want a single readable story: route → controller → request fields → validation → service calls — plus honest **coverage** (what the graph has vs. what is missing).
+Use it after `find` when you want a single readable story: frontend client → HTTP endpoint → backend route/controller → request fields → validation → service calls — plus honest **coverage** (what the graph has vs. what is missing).
 
 ## What it includes
 
@@ -10,6 +10,7 @@ Use it after `find` when you want a single readable story: route → controller 
 - **Flow (best path)** — one chain, e.g. `POST api/payments → PaymentController::pay → fields → validates → calls`
 - **Coverage** — complete / partial / missing (entry, intake, validation, calls, field flow, …)
 - **Entry points** — `ROUTES_TO`, `BLADE_USES_ACTION`
+- **HTTP downstream** — resolved `HTTP_REQUEST` → API endpoint → backend controller
 - **Context** — upstream consumers, risk, impact score
 - **Reads**, **Validation**, **Calls**, **Assignments**, **Other** (persist, config, warnings)
 - routes resolve to controller methods (`resolves to: …`)

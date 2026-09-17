@@ -90,7 +90,9 @@ repo-ranger trace sqlite/Graph.sqlite "api:GET:contents/{param}/multiview" --dep
 repo-ranger ai-context sqlite/Graph.sqlite "App\\Http\\Controllers\\FooController::index" --compact --depth=3 --limit=25
 ```
 
-`trace` and `ai-context` walk **outgoing `CALLS` chains** with bounded depth:
+`trace` and `ai-context` walk **outgoing `CALLS` chains** with bounded depth.
+For frontend clients, they also follow resolved `HTTP_REQUEST` edges into the
+matching backend route and controller:
 
 | Option | Default | Purpose |
 |--------|---------|---------|

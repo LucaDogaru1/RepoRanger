@@ -1,6 +1,6 @@
 {
   "name": "repo-ranger",
-  "version": "1.1.9",
+  "version": "2.0.0",
   "description": "RepoRanger — static code graph scanner and navigation CLI for AI-assisted development. Supports PHP/Laravel, JavaScript/TypeScript, Vue, and Nuxt.",
   "main": "bin/repo-ranger.js",
   "bin": {

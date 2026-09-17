@@ -59,7 +59,7 @@ Options:
 |---|---|---|
 | `--limit=N` | `20` | Max entries per section |
 | `--include-depends-on` | off | Include constructor dependency edges |
-| `--include-interface-resolved` | off | Include interface-resolved call edges |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved call edges |
 | `--impact-depth=N` | `2` | Depth for embedded change-impact scoring |
 | `--impact-limit=N` | `5` | Max rows in embedded change-impact lists |
 | `--no-impact-score` | off | Disable embedded blast-radius section |
@@ -118,7 +118,7 @@ Options:
 |---|---|---|
 | `--limit=N` | `20` | Max cycles shown |
 | `--include-depends-on` | off | Include `DEPENDS_ON` edges |
-| `--include-interface-resolved` | off | Include `INTERFACE_RESOLVED` calls |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved calls |
 | `--fail-on-cycles` | off | Exit code `1` if any cycles are found |
 | `--json` | off | Output as JSON |
 | `--output=<file>` | — | Write report to file |
@@ -169,7 +169,7 @@ Options:
 |---|---|---|
 | `--limit=N` | `20` | Max methods shown |
 | `--debug="Class::method"` | — | Show detailed scoring breakdown for a method |
-| `--include-interface-resolved` | off | Count interface-resolved calls as usage |
+| `--include-interface-resolved` | off | Count speculative interface/extends/override-resolved calls as usage |
 | `--include-depends-on` | off | Accepted, no scoring effect |
 | `--no-ignore-constructors` | off | Include constructors |
 | `--no-ignore-controller-actions` | off | Include controller action methods |
@@ -225,7 +225,7 @@ Options:
 |---|---|---|
 | `--limit=N` | `20` | Max violations shown |
 | `--include-depends-on` | off | Check `DEPENDS_ON` edges too |
-| `--include-interface-resolved` | off | Include interface-resolved calls |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved calls |
 | `--ignore-likely-false-positives` | off | Exclude framework HTTP false positives from active results and fail checks |
 | `--architecture-config=<file>` | — | JSON rules: `architecture.ignorePatterns` / `architecture.allow` (e.g. `config/architecture_scan/spott.json`) |
 | `--fail-on-violations` | off | Exit code `1` if violations are found |
@@ -287,7 +287,7 @@ Options:
 |---|---|---|
 | `--limit=N` | `20` | Max entries per section |
 | `--include-depends-on` | off | Include dependency edges in scoring |
-| `--include-interface-resolved` | off | Include interface-resolved calls |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved calls |
 | `--json` | off | Output as JSON |
 | `--output=<file>` | — | Write report to file |
 
@@ -334,7 +334,7 @@ Options:
 | `--decay=N` | `0.6` | Weight decay per hop (`0.1` to `1.0`) |
 | `--verbose` | off | Show affected file list and technical details |
 | `--include-depends-on` | off | Include `DEPENDS_ON` links |
-| `--include-interface-resolved` | off | Include interface-resolved calls |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved calls |
 | `--json` | off | Output as JSON |
 | `--output=<file>` | — | Write report to file |
 
@@ -499,7 +499,7 @@ enough.
 
 ## Trace
 
-Purpose: compact end-to-end flow report for one symbol — route → controller → fields → validation → calls, plus coverage gaps.
+Purpose: compact end-to-end flow report for one symbol — frontend → HTTP endpoint → backend route/controller → fields → validation → calls, plus coverage gaps.
 
 ```bash
 npm run analyze:trace -- <db.sqlite> "<symbol>" [options]
@@ -519,7 +519,7 @@ Options:
 | Option | Default | Description |
 |---|---|---|
 | `--limit=N` | `20` | Max rows per section |
-| `--include-interface-resolved` | off | Include interface-resolved call edges |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved call edges |
 | `--json` | off | Structured `TraceResult` payload |
 | `--output=<file>` | — | Write plain-text or JSON to file |
 
@@ -551,7 +551,7 @@ Options:
 | `--depth=N` | `2` | Depth used by change-impact aggregation |
 | `--limit=N` | `20` | Max rows per section |
 | `--include-depends-on` | off | Include constructor dependencies |
-| `--include-interface-resolved` | off | Include interface-resolved calls |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved calls |
 | `--compact` | off | Render a denser Markdown report for AI prompt paste |
 | `--json` | off | Output machine-readable JSON instead of Markdown |
 | `--output=<file>` | — | Write report to file |
@@ -561,7 +561,7 @@ Output explanation:
 - `--compact` keeps the same information model with shorter Markdown sections.
 - Summary includes risk ranking context (`risk rank`, `percentile`, candidate-pool scope, and graph population).
 - Architecture notes mark likely framework HTTP false positives when applicable.
-- Includes target metadata, summary, purpose guess, callers, calls, dependencies, inheritance, architecture notes, cycles, and suggested review scope.
+- Includes target metadata, summary, purpose guess, callers, calls, HTTP downstream, dependencies, inheritance, architecture notes, cycles, and suggested review scope.
 - Built as an aggregation layer on top of existing analyses.
 - Pair with `trace` for a quick flow overview, then `ai-context` for the full paste.
 
@@ -618,7 +618,7 @@ Options:
 | `--limit=N` | `10` | Max ranked components shown |
 | `--candidate-pool=N` | `max(limit*20,100)` | Number of hotspot candidates to evaluate before ranking |
 | `--include-depends-on` | off | Include constructor dependencies |
-| `--include-interface-resolved` | off | Include interface-resolved calls |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved calls |
 | `--json` | off | Output machine-readable JSON |
 | `--output=<file>` | — | Write report to file |
 
