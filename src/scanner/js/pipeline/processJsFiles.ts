@@ -13,6 +13,7 @@ import walk, { createWalkContext } from "../walk/jsWalker";
 import { errorDetail, recordScanFailure } from "../../../shared/reporting/scanFailures";
 import { createScanProgress } from "../../../shared/reporting/scanProgress";
 import { parseTreeSitterSource } from "../../../shared/parsing/parseTreeSitterSource";
+import { pruneUnresolvedJsCalls } from "../resolvers/pruneUnresolvedCalls";
 
 function isVueFile(relativePath: string): boolean {
     return relativePath.endsWith(".vue");
@@ -174,6 +175,7 @@ export function processJsFiles(
         const linkProgress = createScanProgress({ label: "JS link" });
         linkProgress.start();
         const linkStats = linkCrossLanguageEndpoints();
+        const prunedCalls = pruneUnresolvedJsCalls();
         linkProgress.done();
 
         if (linkStats.canonicalized > 0 || linkStats.merged > 0 || linkStats.backendLinked > 0) {
@@ -181,6 +183,9 @@ export function processJsFiles(
                 `Cross-language endpoints: ${linkStats.canonicalized} canonicalized, ` +
                 `${linkStats.merged} merged, ${linkStats.backendLinked} linked to PHP backend`
             );
+        }
+        if (prunedCalls > 0) {
+            console.log(`Pruned ${prunedCalls} unresolved JS call edges`);
         }
     }
 }

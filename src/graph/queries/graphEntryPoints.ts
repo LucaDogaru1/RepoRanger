@@ -1,4 +1,3 @@
-/** Edge types that mark HTTP/view entry into a controller method (not call-chain callers). */
 export const INCOMING_ENTRY_EDGE_TYPES = [
     "ROUTES_TO",
     "BLADE_USES_ACTION",
@@ -12,12 +11,10 @@ export function isIncomingEntryEdgeType(type: string): type is IncomingEntryEdge
     return (INCOMING_ENTRY_EDGE_TYPES as readonly string[]).includes(type);
 }
 
-/** SQL fragment: `type IN ('ROUTES_TO', 'BLADE_USES_ACTION')` */
 export function incomingEntryEdgeTypesSql(): string {
     return `type IN (${INCOMING_ENTRY_EDGE_SQL})`;
 }
 
-/** SQL fragment for counting incoming usage links (calls + optional entry points + depends_on). */
 export function incomingUsageEdgeWhereSql(options: {
     includeInterfaceResolved: boolean;
     includeDependsOn: boolean;
@@ -32,7 +29,7 @@ export function incomingUsageEdgeWhereSql(options: {
             AND (
                 ? = 1
                 OR call_type IS NULL
-                OR call_type != 'INTERFACE_RESOLVED'
+                OR call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
             )
         )
         ${entryClause}

@@ -118,6 +118,30 @@ const load = async () => {
     assert.equal(httpEdges[0]?.via, "$fetch");
 }
 
+function testExtractFromLocalTemplateBase(): void {
+    const source = `
+const load = async (id) => {
+  const base = \`\${normalizeUrl(host)}api/v3/contents/\${id}\`;
+  await $fetch(\`\${base}\`);
+  await $fetch(\`\${base}/related-contents?filter[status]=3\`);
+};
+`;
+    const parser = createTsParser();
+    const tree = parser.parse(source);
+    resetGraph();
+    const context = createWalkContext("packages/player/composables/useApiRecording.ts");
+    walk(tree.rootNode, context.file, context);
+
+    const targets = [...graph.edges.values()]
+        .filter(edge => edge.type === "HTTP_REQUEST")
+        .map(edge => edge.to)
+        .sort();
+    assert.deepEqual(targets, [
+        "http:GET:/api/v3/contents/{param}",
+        "http:GET:/api/v3/contents/{param}/related-contents",
+    ]);
+}
+
 function testNuxtComposableFixturesWhenPresent(): void {
     const nuxtRoot = path.resolve(__dirname, "../../../../../../spott/nuxt");
     const fixtures = [
@@ -171,6 +195,9 @@ function run(): void {
 
     testExtractFromLocalUrlBuilder();
     console.log("  ✓ resolves local URL builders used by $fetch");
+
+    testExtractFromLocalTemplateBase();
+    console.log("  ✓ resolves local template bases reused by $fetch");
 
     testNuxtComposableFixturesWhenPresent();
     console.log("  ✓ Nuxt composable fixtures emit HTTP_REQUEST edges");

@@ -34,6 +34,19 @@ function normalizeBasePath(path: string): string {
     return path.startsWith("/") ? path : `/${path}`;
 }
 
+function expandNestedResourcePath(path: string): string {
+    const segments = path.split(".").filter(Boolean);
+    if (segments.length <= 1) {
+        return path;
+    }
+
+    return segments
+        .flatMap((segment, index) => index < segments.length - 1
+            ? [segment, "{param}"]
+            : [segment])
+        .join("/");
+}
+
 export function expandResourceRoutes(
     verb: "resource" | "apiResource",
     basePath: string,
@@ -41,7 +54,10 @@ export function expandResourceRoutes(
     prefix: string,
     options?: { only?: string[]; except?: string[]; middleware?: string[] }
 ): RouteDefinition[] {
-    const normalizedBase = joinRoutePath(prefix, normalizeBasePath(basePath));
+    const normalizedBase = joinRoutePath(
+        prefix,
+        normalizeBasePath(expandNestedResourcePath(basePath)),
+    );
     const allowed = new Set(
         RESOURCE_ACTIONS
             .map(item => item.action)

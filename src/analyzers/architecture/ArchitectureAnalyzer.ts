@@ -354,7 +354,7 @@ export function analyzeArchitectureForNodes(
                 AND (
                     ? = 1
                     OR call_type IS NULL
-                    OR call_type != 'INTERFACE_RESOLVED'
+                    OR call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
                 )
             )
             OR (? = 1 AND type = 'DEPENDS_ON')
@@ -408,7 +408,7 @@ export function analyzeArchitecture(db: SQLiteDatabase, options?: ArchitectureOp
             AND (
                 ? = 1
                 OR call_type IS NULL
-                OR call_type != 'INTERFACE_RESOLVED'
+                OR call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
             )
         )
         OR (
@@ -455,4 +455,3 @@ export function analyzeArchitecture(db: SQLiteDatabase, options?: ArchitectureOp
         violations,
     };
 }
-

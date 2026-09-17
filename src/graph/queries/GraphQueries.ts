@@ -26,6 +26,7 @@ export type DependsOnRelationRow = {
 };
 
 interface CallQueryOptions {
+    /** Backward-compatible name: opt in to all inferred *_RESOLVED dispatch targets. */
     includeInterfaceResolved?: boolean;
     limit?: number;
 }
@@ -49,13 +50,13 @@ export function findIncomingCalls(
     const rows = db.prepare(`
         SELECT e.from_id, e.call_type, e.via, n.file
         FROM edges e
-        LEFT JOIN nodes n ON n.id = e.from_id
+        JOIN nodes n ON n.id = e.from_id
         WHERE e.to_id = ?
           AND e.type = 'CALLS'
           AND (
               ? = 1
               OR e.call_type IS NULL
-              OR e.call_type != 'INTERFACE_RESOLVED'
+              OR e.call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
           )
         ORDER BY e.from_id ASC
         LIMIT ?
@@ -85,13 +86,13 @@ export function findOutgoingCalls(
     const rows = db.prepare(`
         SELECT e.to_id, e.call_type, e.via, n.file
         FROM edges e
-        LEFT JOIN nodes n ON n.id = e.to_id
+        JOIN nodes n ON n.id = e.to_id
         WHERE e.from_id = ?
           AND e.type = 'CALLS'
           AND (
               ? = 1
               OR e.call_type IS NULL
-              OR e.call_type != 'INTERFACE_RESOLVED'
+              OR e.call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
           )
         ORDER BY e.to_id ASC
         LIMIT ?
@@ -227,4 +228,3 @@ export function getRelationTargetId(node: Pick<GraphNodeRow, "type" | "parent" |
     }
     return node.id;
 }
-

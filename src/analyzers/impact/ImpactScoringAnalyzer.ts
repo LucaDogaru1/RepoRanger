@@ -284,11 +284,21 @@ export function buildImpactGraphIndex(
            OR (? = 1 AND type = 'DEPENDS_ON')
     `).all(includeDependsOn ? 1 : 0) as EdgeRow[];
 
+    const existingNodeIds = new Set(
+        (db.prepare(`SELECT id FROM nodes`).all() as Array<{ id: string }>).map(row => row.id),
+    );
     const filteredEdges = edgeRows.filter(edge => {
+        if (!existingNodeIds.has(edge.from_id) || !existingNodeIds.has(edge.to_id)) {
+            return false;
+        }
         if (edge.type !== "CALLS" || includeInterfaceResolved) {
             return true;
         }
-        return !edge.call_type || edge.call_type !== "INTERFACE_RESOLVED";
+        return !edge.call_type || ![
+            "INTERFACE_RESOLVED",
+            "EXTENDS_RESOLVED",
+            "OVERRIDE_RESOLVED",
+        ].includes(edge.call_type);
     });
 
     const incomingByNode = new Map<string, EdgeRow[]>();
@@ -462,5 +472,3 @@ export function analyzeChangeImpact(
     result.targetType = targetNode?.type ?? "unknown";
     return result;
 }
-
-

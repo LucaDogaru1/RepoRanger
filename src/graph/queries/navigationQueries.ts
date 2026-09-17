@@ -21,6 +21,11 @@ export interface HttpUpstreamRow {
     controllerMethod: string | null;
 }
 
+export interface HttpDownstreamRow extends HttpUpstreamRow {
+    routeEndpointId: string | null;
+    controllerFile: string | null;
+}
+
 function methodScopePrefix(methodId: string): string {
     return `${methodId}::`;
 }
@@ -229,13 +234,13 @@ function findIncomingCallEntries(
     const calls = db.prepare(`
         SELECT e.from_id, n.file
         FROM edges e
-        LEFT JOIN nodes n ON n.id = e.from_id
+        JOIN nodes n ON n.id = e.from_id
         WHERE e.to_id = ?
           AND e.type = 'CALLS'
           AND (
               ? = 1
               OR e.call_type IS NULL
-              OR e.call_type != 'INTERFACE_RESOLVED'
+              OR e.call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
           )
         ORDER BY e.from_id ASC
         LIMIT ?
@@ -387,6 +392,89 @@ export function findHttpUpstream(
         endpointId: row.endpoint_id,
         controllerMethod: row.controller_method,
     }));
+}
+
+function endpointVersion(endpointId: string): string | null {
+    return endpointId.match(/\/api\/v(\d+)(?:\/|$)/i)?.[1] ?? null;
+}
+
+function downstreamCandidateScore(row: HttpDownstreamRow, sourceFile: string | null): number {
+    let score = 0;
+    const version = endpointVersion(row.endpointId);
+
+    if (version && row.routeEndpointId?.toLowerCase().includes(`/api/v${version}/`)) {
+        score += 100;
+    }
+    if (version && row.controllerMethod?.includes(`\\Api\\V${version}\\`)) {
+        score += 80;
+    }
+    if (sourceFile?.startsWith("nuxt/") && row.controllerFile?.includes("/apps/spott-frontend/")) {
+        score += 40;
+    }
+    if (sourceFile?.startsWith("nuxt/") && row.controllerMethod?.startsWith("SpOTTFrontend\\")) {
+        score += 30;
+    }
+    if (sourceFile?.startsWith("nuxt/") && row.controllerFile?.includes("/apps/spott-backend/")) {
+        score -= 20;
+    }
+
+    return score;
+}
+
+export function findHttpDownstream(
+    db: SQLiteDatabase,
+    componentId: string,
+    limit: number,
+): HttpDownstreamRow[] {
+    const source = db.prepare(`SELECT file FROM nodes WHERE id = ? LIMIT 1`).get(componentId) as
+        { file: string | null } | undefined;
+    const rows = db.prepare(`
+        SELECT DISTINCT
+            h.from_id AS component_id,
+            h.to_id AS endpoint_id,
+            resolution.to_id AS route_endpoint_id,
+            route.to_id AS controller_method,
+            controller.file AS controller_file
+        FROM edges h
+        LEFT JOIN edges resolution
+          ON resolution.type = 'RESOLVES_TO'
+         AND resolution.from_id = h.to_id
+        LEFT JOIN edges route
+          ON route.type = 'ROUTES_TO'
+         AND route.from_id = COALESCE(resolution.to_id, h.to_id)
+        LEFT JOIN nodes controller ON controller.id = route.to_id
+        WHERE h.type = 'HTTP_REQUEST'
+          AND h.from_id = ?
+        ORDER BY h.to_id ASC, route.to_id ASC
+    `).all(componentId) as Array<{
+        component_id: string;
+        endpoint_id: string;
+        route_endpoint_id: string | null;
+        controller_method: string | null;
+        controller_file: string | null;
+    }>;
+
+    const mapped = rows.map(row => ({
+        componentId: row.component_id,
+        endpointId: row.endpoint_id,
+        routeEndpointId: row.route_endpoint_id,
+        controllerMethod: row.controller_method,
+        controllerFile: row.controller_file,
+    }));
+    const byEndpoint = new Map<string, HttpDownstreamRow[]>();
+    for (const row of mapped) {
+        const group = byEndpoint.get(row.endpointId) ?? [];
+        group.push(row);
+        byEndpoint.set(row.endpointId, group);
+    }
+
+    const selected: HttpDownstreamRow[] = [];
+    for (const group of byEndpoint.values()) {
+        const bestScore = Math.max(...group.map(row => downstreamCandidateScore(row, source?.file ?? null)));
+        selected.push(...group.filter(row => downstreamCandidateScore(row, source?.file ?? null) === bestScore));
+    }
+
+    return selected.slice(0, limit);
 }
 
 export function findMethodScopedEdges(
@@ -607,14 +695,19 @@ export function buildNavigationWarnings(input: {
     fieldAssignments: NavigationEdgeRow[];
     fieldFlowsOut: NavigationEdgeRow[];
     calleesCount: number;
+    httpDownstreamCount?: number;
 }): string[] {
     const warnings: string[] = [];
-    const lower = input.target.id.toLowerCase();
-    const isController = lower.includes("controller");
+    const classId = input.target.type === "method"
+        ? input.target.parent ?? input.target.id.split("::")[0] ?? input.target.id
+        : input.target.id;
+    const className = classId.split("\\").pop() ?? classId;
+    const isController = /Controller$/i.test(className);
     const hasEntry = input.graphEntriesCount > 0
         || input.callersCount > 0
         || input.routeEntries.length > 0
-        || input.bladeEntries.length > 0;
+        || input.bladeEntries.length > 0
+        || (input.httpDownstreamCount ?? 0) > 0;
 
     if (!hasEntry) {
         warnings.push("No CALLS, ROUTES_TO, or BLADE_USES_ACTION entry — symbol may be unreachable, externally invoked, or missing route extraction.");
@@ -634,4 +727,3 @@ export function buildNavigationWarnings(input: {
 
     return warnings;
 }
-

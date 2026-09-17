@@ -39,6 +39,26 @@ INSERT INTO edges VALUES
   ('App\\FanOut::go', 'App\\Hop1::e', 'CALLS', NULL, NULL);
 `);
 
+db.exec(`
+INSERT INTO nodes VALUES
+  ('App\\ConcreteQuery::run', NULL, 'method', 'run', 'ConcreteQuery.php', 1, 10),
+  ('App\\SiblingQuery::run', NULL, 'method', 'run', 'SiblingQuery.php', 1, 10);
+
+INSERT INTO edges VALUES
+  ('App\\Controller::index', 'App\\ConcreteQuery::run', 'CALLS', 'OVERRIDE_RESOLVED', 'App\\Query::run'),
+  ('App\\Controller::index', 'App\\SiblingQuery::run', 'CALLS', 'EXTENDS_RESOLVED', 'App\\Query::run'),
+  ('App\\Controller::index', 'js:missing-library.js::computed', 'CALLS', NULL, NULL);
+`);
+
+db.exec(`
+INSERT INTO nodes VALUES
+  ('App\\ChildRepository::__construct', NULL, 'method', '__construct', 'ChildRepository.php', 1, 10),
+  ('App\\AbstractRepository::__construct', NULL, 'method', '__construct', 'AbstractRepository.php', 1, 10);
+
+INSERT INTO edges VALUES
+  ('App\\ChildRepository::__construct', 'App\\AbstractRepository::__construct', 'CALLS', 'STATIC', NULL);
+`);
+
 function test(name: string, fn: () => void): void {
     try {
         fn();
@@ -52,6 +72,36 @@ function test(name: string, fn: () => void): void {
 test("depth 1 returns only direct callees", () => {
     const { calls } = findOutgoingCallChain(db, "App\\Controller::index", { depth: 1, limit: 20 });
     assert.deepEqual(calls.map(item => item.id), ["App\\Service::run"]);
+});
+
+test("default traversal excludes speculative override targets", () => {
+    const { calls } = findOutgoingCallChain(db, "App\\Controller::index", { depth: 1, limit: 20 });
+    assert.deepEqual(calls.map(item => item.id), ["App\\Service::run"]);
+});
+
+test("default traversal excludes call targets that have no graph node", () => {
+    const { calls } = findOutgoingCallChain(db, "App\\Controller::index", { depth: 1, limit: 20 });
+    assert.ok(!calls.some(item => item.id === "js:missing-library.js::computed"));
+});
+
+test("resolved override targets remain available by explicit opt-in", () => {
+    const { calls } = findOutgoingCallChain(db, "App\\Controller::index", {
+        depth: 1,
+        limit: 20,
+        includeInterfaceResolved: true,
+    });
+    assert.deepEqual(
+        calls.map(item => item.id),
+        ["App\\ConcreteQuery::run", "App\\Service::run", "App\\SiblingQuery::run"],
+    );
+});
+
+test("static parent calls keep the concrete parent method as traversal target", () => {
+    const { calls } = findOutgoingCallChain(db, "App\\ChildRepository::__construct", {
+        depth: 1,
+        limit: 20,
+    });
+    assert.deepEqual(calls.map(item => item.id), ["App\\AbstractRepository::__construct"]);
 });
 
 test("depth 3 walks breadth-first without duplicate targets", () => {

@@ -184,6 +184,14 @@ function renderTrace(data: TraceResult): string {
     if (data.navigation.configRefs.length > 0) {
         otherLines.push(...data.navigation.configRefs.map(edge => `REFERENCES ${shortNavigationLabel(edge.to)}`));
     }
+    if (data.navigation.httpDownstream.length > 0) {
+        otherLines.push(...data.navigation.httpDownstream.map(request => {
+            const target = request.controllerMethod
+                ? ` → ${shortNavigationLabel(request.controllerMethod)}`
+                : "";
+            return `HTTP_REQUEST ${shortNavigationLabel(request.endpointId)}${target}`;
+        }));
+    }
     for (const entry of formatGraphEntries(
         data.navigation.graphEntries.filter(e => e.kind === "http_client" || e.kind === "call"),
     )) {

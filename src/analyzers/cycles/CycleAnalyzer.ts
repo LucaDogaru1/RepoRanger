@@ -63,7 +63,7 @@ function buildCycleAdjacency(
             AND (
                 ? = 1
                 OR call_type IS NULL
-                OR call_type != 'INTERFACE_RESOLVED'
+                OR call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
             )
         )
         OR (
@@ -94,7 +94,7 @@ function buildCycleAdjacency(
 
     for (const edge of edges) {
         const edgeType = edge.type === "CALLS"
-            ? (edge.call_type === "INTERFACE_RESOLVED" ? "CALLS:INTERFACE_RESOLVED" : "CALLS")
+            ? (edge.call_type?.endsWith("_RESOLVED") ? `CALLS:${edge.call_type}` : "CALLS")
             : edge.type;
 
         const existing = adjacency.get(edge.from_id) ?? [];
@@ -168,7 +168,6 @@ function findCyclesFromStart(
     return cycles;
 }
 
-/** Detect cycles reachable from one or more start nodes (fast path for single-target analysis). */
 export function detectCyclesFromNodes(
     db: SQLiteDatabase,
     startNodeIds: string[],

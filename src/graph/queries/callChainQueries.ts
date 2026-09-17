@@ -30,6 +30,10 @@ export interface CallChainQueryOptions {
 }
 
 function resolveCallTraversalTarget(db: SQLiteDatabase, call: CallRow, callerId: string): string {
+    if (call.callType === "STATIC") {
+        return call.id;
+    }
+
     if (isAbstractCallTarget(db, call.id)) {
         const implementation = resolveInterfaceMethodImplementation(db, call.id, { preferNear: callerId });
         if (implementation) {

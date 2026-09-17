@@ -95,6 +95,13 @@ type AiContextPayload = {
         bladeEntries: Array<{ bladeViewId: string; controllerMethod: string }>;
         graphEntries: Array<{ kind: string; from: string; to: string; file: string | null }>;
         httpUpstream: Array<{ componentId: string; endpointId: string; controllerMethod: string | null }>;
+        httpDownstream: Array<{
+            componentId: string;
+            endpointId: string;
+            routeEndpointId: string | null;
+            controllerMethod: string | null;
+            controllerFile: string | null;
+        }>;
         fieldAssignments: Array<{ type: string; from: string; to: string; via?: string | null }>;
         fieldFlowsOut: Array<{ type: string; from: string; to: string; via?: string | null }>;
         validates: Array<{ type: string; from: string; to: string; via?: string | null }>;
@@ -146,6 +153,17 @@ function renderNavigationSections(payload: AiContextPayload, compact: boolean): 
         lines.push(toBulletList(nav.httpUpstream.map(item =>
             `${shortNavigationLabel(item.componentId)} → ${shortNavigationLabel(item.endpointId)}`,
         )));
+        lines.push("");
+    }
+
+    if (nav.httpDownstream.length > 0) {
+        lines.push("### HTTP downstream (HTTP_REQUEST → ROUTES_TO)");
+        lines.push(toBulletList(nav.httpDownstream.map(item => {
+            const controller = item.controllerMethod
+                ? ` → ${shortNavigationLabel(item.controllerMethod)}`
+                : "";
+            return `${shortNavigationLabel(item.componentId)} → ${shortNavigationLabel(item.endpointId)}${controller}`;
+        })));
         lines.push("");
     }
 
@@ -734,4 +752,3 @@ try {
 } finally {
     db.close();
 }
-

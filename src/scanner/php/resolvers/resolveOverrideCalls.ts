@@ -4,12 +4,16 @@ import {
     extendingClassesByParent,
 } from "./resolveExtendsCalls";
 
-const RESOLVED_CALL_TYPES = new Set(["EXTENDS_RESOLVED", "OVERRIDE_RESOLVED"]);
+const NON_VIRTUAL_CALL_TYPES = new Set([
+    "STATIC",
+    "EXTENDS_RESOLVED",
+    "OVERRIDE_RESOLVED",
+]);
 
 export function resolveOverrideCalls(): void {
     const childrenByParent = extendingClassesByParent();
     const callEdges = Array.from(graph.edges.values()).filter(
-        edge => edge.type === "CALLS" && !RESOLVED_CALL_TYPES.has(edge.callType ?? "")
+        edge => edge.type === "CALLS" && !NON_VIRTUAL_CALL_TYPES.has(edge.callType ?? "")
     );
 
     for (const callEdge of callEdges) {

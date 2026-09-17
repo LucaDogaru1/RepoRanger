@@ -4,6 +4,7 @@ import { searchNodes } from "../../../src/graph/queries/searchNodes";
 import { gatherNavigationContext } from "../../../src/analyzers/navigation/gatherNavigationContext";
 import { findNode } from "../../../src/graph/queries/GraphQueries";
 import {
+    buildNavigationWarnings,
     filterFieldFlowEdges,
     findRouteScopedGraphEntries,
     shortNavigationLabel,
@@ -124,6 +125,17 @@ assert.equal(
     "HTTP endpoint navigation resolves to its backend controller without merging identities",
 );
 
+const jsTarget = findNode(db, "js:resources/js/checkout.ts::submit")!;
+const jsNavigation = gatherNavigationContext(db, jsTarget, { callees: [] });
+assert.deepEqual(
+    jsNavigation.httpDownstream.map(item => ({ endpoint: item.endpointId, controller: item.controllerMethod })),
+    [{
+        endpoint: "http:POST:/api/payments",
+        controller: "App\\Http\\Controllers\\PaymentController::pay",
+    }],
+    "JS navigation follows outgoing HTTP_REQUEST through the backend route",
+);
+
 const scopedEntries = findRouteScopedGraphEntries(
     db,
     "api:POST:api/payments",
@@ -132,6 +144,29 @@ const scopedEntries = findRouteScopedGraphEntries(
 assert.ok(
     !scopedEntries.some(entry => entry.from === "api:GET:/checkout/pay"),
     "findRouteScopedGraphEntries excludes sibling routes",
+);
+
+const controllerTestWarnings = buildNavigationWarnings({
+    target: {
+        id: "Tests\\Feature\\Http\\Controllers\\PaymentControllerTest::setUp",
+        parent: "Tests\\Feature\\Http\\Controllers\\PaymentControllerTest",
+        type: "method",
+        name: "setUp",
+        file: "PaymentControllerTest.php",
+        start_row: 1,
+        end_row: 10,
+    },
+    routeEntries: [],
+    bladeEntries: [],
+    graphEntriesCount: 0,
+    callersCount: 0,
+    fieldAssignments: [],
+    fieldFlowsOut: [],
+    calleesCount: 0,
+});
+assert.ok(
+    !controllerTestWarnings.some(warning => warning.includes("controller action")),
+    "ControllerTest classes are not classified as HTTP controllers",
 );
 
 db.close();

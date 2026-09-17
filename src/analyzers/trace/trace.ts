@@ -104,7 +104,9 @@ function buildOutgoingCalls(
 }
 
 function mapCallChainRow(db: SQLiteDatabase, call: CallChainRow, callerId: string): TraceCallRow {
-    const resolvedTo = isAbstractCallTarget(db, call.id)
+    const resolvedTo = call.callType === "STATIC"
+        ? undefined
+        : isAbstractCallTarget(db, call.id)
         ? resolveInterfaceMethodImplementation(db, call.id, { preferNear: callerId })
             ?? (call.file ? undefined : resolveMethodThroughInheritance(db, call.id) ?? undefined)
         : !call.file
@@ -159,6 +161,13 @@ function buildFlowLines(input: {
         lines.push(`${indent}→ calls ${label}`);
     }
 
+    for (const request of input.navigation.httpDownstream.slice(0, 5)) {
+        lines.push(`  → ${shortNavigationLabel(request.endpointId)} [HTTP_REQUEST]`);
+        if (request.controllerMethod) {
+            lines.push(`    → ${shortNavigationLabel(request.controllerMethod)}`);
+        }
+    }
+
     for (const edge of input.navigation.fieldFlowsOut.slice(0, 4)) {
         lines.push(`  → ${shortNavigationLabel(edge.from)} → ${shortNavigationLabel(edge.to)} (${edge.type})`);
     }
@@ -199,10 +208,14 @@ function buildCoverage(input: {
         missing.push("validation");
     }
 
-    if (input.outgoingCalls.length > 0) {
+    if (input.outgoingCalls.length > 0 || input.navigation.httpDownstream.length > 0) {
         complete.push("calls");
     } else {
         missing.push("calls");
+    }
+
+    if (input.navigation.httpDownstream.length > 0) {
+        complete.push("HTTP downstream");
     }
 
     if (input.navigation.fieldFlowsOut.length > 0) {

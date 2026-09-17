@@ -4,12 +4,14 @@ import {
     NavigationEdgeRow,
     RouteEntryRow,
     HttpUpstreamRow,
+    HttpDownstreamRow,
     BladeEntryRow,
     buildNavigationWarnings,
     countGraphEntries,
     filterFieldIntakeEdges,
     filterFieldFlowEdges,
     findHttpClientsForEndpoint,
+    findHttpDownstream,
     findHttpUpstream,
     findIncomingBladeActions,
     findIncomingGraphEntries,
@@ -29,6 +31,7 @@ export interface NavigationContext {
     bladeEntries: BladeEntryRow[];
     graphEntries: ReturnType<typeof findIncomingGraphEntries>;
     httpUpstream: HttpUpstreamRow[];
+    httpDownstream: HttpDownstreamRow[];
     fieldAssignments: NavigationEdgeRow[];
     fieldFlowsOut: NavigationEdgeRow[];
     validates: NavigationEdgeRow[];
@@ -55,6 +58,7 @@ function gatherForMethod(
         bladeEntries: findIncomingBladeActions(db, methodId, limit),
         graphEntries: findIncomingGraphEntries(db, methodId, { limit, includeInterfaceResolved }),
         httpUpstream: findHttpUpstream(db, methodId, limit),
+        httpDownstream: findHttpDownstream(db, methodId, limit),
         fieldAssignments: filterFieldIntakeEdges(
             findMethodScopedEdges(db, methodId, ["ASSIGNS", "READS_FIELD"], limit),
         ),
@@ -85,6 +89,7 @@ export function gatherNavigationContext(
             bladeEntries: [],
             graphEntries: [],
             httpUpstream: [],
+            httpDownstream: findHttpDownstream(db, target.id, limit),
             fieldAssignments: [],
             fieldFlowsOut: [],
             validates: [],
@@ -103,6 +108,7 @@ export function gatherNavigationContext(
             partial.bladeEntries.push(...methodNav.bladeEntries);
             partial.graphEntries.push(...methodNav.graphEntries);
             partial.httpUpstream.push(...methodNav.httpUpstream);
+            partial.httpDownstream.push(...methodNav.httpDownstream);
             partial.fieldAssignments.push(...methodNav.fieldAssignments);
             partial.fieldFlowsOut.push(...methodNav.fieldFlowsOut);
             partial.validates.push(...methodNav.validates);
@@ -136,6 +142,7 @@ export function gatherNavigationContext(
             httpUpstream: routeEndpointId
                 ? findHttpClientsForEndpoint(db, routeEndpointId, limit)
                 : [],
+            httpDownstream: [],
             fieldAssignments: [],
             fieldFlowsOut: [],
             validates: [],
@@ -157,6 +164,7 @@ export function gatherNavigationContext(
             bladeEntries: [],
             graphEntries: [],
             httpUpstream: [],
+            httpDownstream: findHttpDownstream(db, target.id, limit),
             fieldAssignments: findOutgoingEdgesByType(db, target.id, ["ASSIGNS"], limit),
             fieldFlowsOut: filterFieldFlowEdges(
                 findOutgoingEdgesByType(db, target.id, ["FLOWS_TO", "ARGUMENT_TO"], limit),
@@ -177,6 +185,7 @@ export function gatherNavigationContext(
         fieldAssignments: partial.fieldAssignments,
         fieldFlowsOut: partial.fieldFlowsOut,
         calleesCount: options?.callees?.length ?? 0,
+        httpDownstreamCount: partial.httpDownstream.length,
     });
 
     return { ...partial, warnings };

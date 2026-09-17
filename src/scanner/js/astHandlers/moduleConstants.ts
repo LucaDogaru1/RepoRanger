@@ -76,6 +76,10 @@ function readDeclaratorValue(node: Parser.SyntaxNode): string | null {
         return fragment?.text ?? valueNode.text.replace(/^["'`]|["'`]$/g, "");
     }
 
+    if (valueNode.type === "template_string") {
+        return normalizeInferredFetchPath(resolveTemplateString(valueNode, new Map()));
+    }
+
     return null;
 }
 

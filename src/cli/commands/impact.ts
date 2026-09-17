@@ -81,7 +81,7 @@ const usages = db.prepare(`
       AND (
           ? = 1
           OR e.call_type IS NULL
-          OR e.call_type != 'INTERFACE_RESOLVED'
+          OR e.call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
       )
 `).all(targetId, includeInterfaceResolved ? 1 : 0) as any[];
 
@@ -110,7 +110,7 @@ const dependencies = db.prepare(`
       AND (
           ? = 1
           OR e.call_type IS NULL
-          OR e.call_type != 'INTERFACE_RESOLVED'
+          OR e.call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
       )
 `).all(targetId, includeInterfaceResolved ? 1 : 0) as any[];
 
@@ -275,7 +275,7 @@ const mostImportantMethods = relationTargetId
             AND (
                 ? = 1
                 OR e.call_type IS NULL
-                OR e.call_type != 'INTERFACE_RESOLVED'
+                OR e.call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
             )
         )
         WHERE m.type = 'method'
@@ -332,7 +332,7 @@ const allCallEdges = db.prepare(`
       AND (
           ? = 1
           OR call_type IS NULL
-          OR call_type != 'INTERFACE_RESOLVED'
+          OR call_type NOT IN ('INTERFACE_RESOLVED', 'EXTENDS_RESOLVED', 'OVERRIDE_RESOLVED')
       )
 `).all(includeInterfaceResolved ? 1 : 0) as Array<{ from_id: string; to_id: string }>;
 

@@ -34,7 +34,7 @@ npm run analyze:trace -- sqlite/Graph.sqlite "App\\Http\\Controllers\\PaymentCon
 | Option | Default | Description |
 |---|---|---|
 | `--limit=N` | `20` | Max rows per section |
-| `--include-interface-resolved` | off | Include `INTERFACE_RESOLVED` call edges |
+| `--include-interface-resolved` | off | Include speculative interface/extends/override-resolved dispatch targets |
 | `--json` | off | Structured `TraceResult` payload |
 | `--output=path` | — | Write plain-text (or JSON) to file |
 

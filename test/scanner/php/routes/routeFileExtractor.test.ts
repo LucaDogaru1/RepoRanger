@@ -73,6 +73,19 @@ test("apiResource maps all REST verbs to correct actions", () => {
     assert.equal(actions.get("DELETE /posts/{param}"), "destroy");
 });
 
+test("nested apiResource names expand to Laravel nested paths", () => {
+    const routes = extractRoutesFromSource(`
+        use App\\Http\\Controllers\\ModuleContentController;
+
+        Route::apiResource('modules.contents', ModuleContentController::class)
+            ->only(['index', 'show']);
+    `);
+
+    const actions = routeActions(routes);
+    assert.equal(actions.get("GET /modules/{param}/contents"), "index");
+    assert.equal(actions.get("GET /modules/{param}/contents/{param}"), "show");
+});
+
 test("resource includes browser create and edit routes", () => {
     const routes = extractRoutesFromSource(`
         use App\\Http\\Controllers\\PostController;

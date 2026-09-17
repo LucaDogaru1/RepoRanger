@@ -87,7 +87,9 @@ function endpointPathsMatch(clientPath: string, routePath: string): {
 } {
     const client = normalizeEndpointPath(clientPath).toLowerCase();
     const route = normalizeEndpointPath(routePath).toLowerCase();
-    if (client === route) {
+    const comparableClient = client.startsWith("/") ? client : `/${client}`;
+    const comparableRoute = route.startsWith("/") ? route : `/${route}`;
+    if (comparableClient === comparableRoute) {
         return { matches: true, confidence: 1, reason: "identical normalized endpoint path" };
     }
 
@@ -121,13 +123,22 @@ function linkHttpEndpointsToRoutes(): number {
             continue;
         }
 
-        for (const route of routes) {
+        const candidates = routes.flatMap(route => {
             if (route.method !== client.method) {
-                continue;
+                return [];
             }
 
             const pathMatch = endpointPathsMatch(client.path, route.path);
             if (!pathMatch.matches) {
+                return [];
+            }
+
+            return [{ route, pathMatch }];
+        });
+
+        const bestConfidence = Math.max(0, ...candidates.map(candidate => candidate.pathMatch.confidence));
+        for (const { route, pathMatch } of candidates) {
+            if (pathMatch.confidence < bestConfidence) {
                 continue;
             }
 
