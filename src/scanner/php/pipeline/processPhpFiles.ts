@@ -13,6 +13,7 @@ import {
     extractRoutesFromRouteFile,
     isRouteFile,
 } from "../routes/routeFileExtractor";
+import { collectRouteMounts } from "../routes/routeMounts";
 import {
     classPropertyTypesRegistry,
     propagateClassPropertyTypes,
@@ -61,6 +62,7 @@ export function processPhpFiles(files: ScannedPhpFile[], parser: Parser) {
     const phpFiles: ScannedPhpFile[] = [];
 
     classPropertyTypesRegistry.clear();
+    const routeMounts = collectRouteMounts(files);
 
     const prepProgress = createScanProgress({ label: "PHP prep", total: files.length });
     prepProgress.start();
@@ -85,7 +87,8 @@ export function processPhpFiles(files: ScannedPhpFile[], parser: Parser) {
             try {
                 extractedRouteCount += extractRoutesFromRouteFile(
                     file.absolutePath,
-                    file.relativePath
+                    file.relativePath,
+                    routeMounts.get(file.relativePath),
                 );
             } catch (error) {
                 recordScanFailure({

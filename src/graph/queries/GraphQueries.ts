@@ -39,6 +39,16 @@ export function findNode(db: SQLiteDatabase, id: string): GraphNodeRow | undefin
     `).get(id) as GraphNodeRow | undefined;
 }
 
+export function findSfcModule(
+    db: SQLiteDatabase,
+    node: { type: string; file: string | null },
+): GraphNodeRow | undefined {
+    if (node.type !== "vue_component" || !node.file?.endsWith(".vue")) {
+        return undefined;
+    }
+    return findNode(db, `js:${node.file}`);
+}
+
 export function findIncomingCalls(
     db: SQLiteDatabase,
     id: string,

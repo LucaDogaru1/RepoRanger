@@ -2,7 +2,7 @@ import Parser from "tree-sitter";
 import { callExpressionType } from "../astHandlers/callExpression";
 import { classDeclarationType } from "../astHandlers/classDeclaration";
 import { exportStatementType } from "../astHandlers/exportStatement";
-import { functionDeclarationType } from "../astHandlers/functionDeclaration";
+import { functionDeclarationType, functionVariableDeclarationType } from "../astHandlers/functionDeclaration";
 import {
     trackHttpResourceDeclarator,
     trackHttpResourcesInObject,
@@ -34,6 +34,12 @@ export default function walk(
                 for (const declarator of child.children) {
                     if (declarator.type === "variable_declarator") {
                         trackHttpResourceDeclarator(declarator, childContext);
+                    }
+                }
+                if (!file.endsWith(".vue")) {
+                    const functionId = functionVariableDeclarationType(child, childContext);
+                    if (functionId) {
+                        childContext = { ...childContext, currentFunction: functionId };
                     }
                 }
                 break;

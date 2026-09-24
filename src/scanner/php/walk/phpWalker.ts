@@ -111,7 +111,7 @@ export default function walk(rootNode: Parser.SyntaxNode, file:string, context: 
                 dataFlowAssignment(child, childContext);
                 break;
             case "scoped_call_expression":
-                scopedCallExpressionType(child, childContext);
+                scopedCallExpressionType(child, childContext, file);
                 {
                     const persistTarget = resolvePersistTargetFromScopedCall(child, childContext);
                     if (persistTarget) {

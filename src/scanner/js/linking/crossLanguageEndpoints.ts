@@ -72,32 +72,43 @@ function canonicalizeHttpEndpointIds(): number {
     return canonicalized;
 }
 
-function stripConventionalApiPrefix(path: string): string {
-    const normalized = normalizeEndpointPath(path);
-    const withLeadingSlash = normalized.startsWith("/") ? normalized : `/${normalized}`;
-    return normalizeEndpointPath(
-        withLeadingSlash.replace(/^\/api(?:\/v\d+)?(?=\/|$)/i, "") || "/",
-    );
+const CONVENTIONAL_API_PREFIX = /^\/api(?:\/v\d+)?(?=\/|$)/i;
+
+function comparablePath(path: string): string {
+    const withoutQuery = path.replace(/[?#].*$/, "");
+    const normalized = normalizeEndpointPath(withoutQuery).toLowerCase();
+    return normalized.startsWith("/") ? normalized : `/${normalized}`;
 }
 
-function endpointPathsMatch(clientPath: string, routePath: string): {
+export function endpointPathsMatch(clientPath: string, routePath: string, routeMount?: string): {
     matches: boolean;
     confidence: number;
     reason: string;
 } {
-    const client = normalizeEndpointPath(clientPath).toLowerCase();
-    const route = normalizeEndpointPath(routePath).toLowerCase();
-    const comparableClient = client.startsWith("/") ? client : `/${client}`;
-    const comparableRoute = route.startsWith("/") ? route : `/${route}`;
-    if (comparableClient === comparableRoute) {
+    const client = comparablePath(clientPath);
+    const route = comparablePath(routePath);
+    if (client === route) {
         return { matches: true, confidence: 1, reason: "identical normalized endpoint path" };
     }
 
-    if (stripConventionalApiPrefix(client) === stripConventionalApiPrefix(route)) {
+    const clientHasApiPrefix = CONVENTIONAL_API_PREFIX.test(client);
+
+    if (routeMount !== undefined) {
+        if (!clientHasApiPrefix && route === comparablePath(`/api${client}`)) {
+            return {
+                matches: true,
+                confidence: 0.8,
+                reason: "client path is relative to the /api base URL",
+            };
+        }
+        return { matches: false, confidence: 0, reason: "different endpoint paths" };
+    }
+
+    if (clientHasApiPrefix && comparablePath(client.replace(CONVENTIONAL_API_PREFIX, "") || "/") === route) {
         return {
             matches: true,
-            confidence: 0.9,
-            reason: "endpoint paths match after conventional API/version prefix normalization",
+            confidence: 0.7,
+            reason: "route file mount unknown; assumed conventional API/version prefix",
         };
     }
 
@@ -107,9 +118,9 @@ function endpointPathsMatch(clientPath: string, routePath: string): {
 function linkHttpEndpointsToRoutes(): number {
     const routes = [...graph.nodes.entries()]
         .filter(([id, node]) => node.type === "api_endpoint" && hasRoutesTo(id))
-        .flatMap(([id]) => {
+        .flatMap(([id, node]) => {
             const parsed = parseApiEndpointId(id);
-            return parsed ? [{ id, ...parsed }] : [];
+            return parsed ? [{ id, routeMount: node.routeMount, ...parsed }] : [];
         });
 
     let linked = 0;
@@ -128,7 +139,7 @@ function linkHttpEndpointsToRoutes(): number {
                 return [];
             }
 
-            const pathMatch = endpointPathsMatch(client.path, route.path);
+            const pathMatch = endpointPathsMatch(client.path, route.path, route.routeMount);
             if (!pathMatch.matches) {
                 return [];
             }
@@ -137,17 +148,15 @@ function linkHttpEndpointsToRoutes(): number {
         });
 
         const bestConfidence = Math.max(0, ...candidates.map(candidate => candidate.pathMatch.confidence));
-        for (const { route, pathMatch } of candidates) {
-            if (pathMatch.confidence < bestConfidence) {
-                continue;
-            }
-
+        const best = candidates.filter(candidate => candidate.pathMatch.confidence >= bestConfidence);
+        const ambiguity = best.length > 1 ? `; ambiguous between ${best.length} routes` : "";
+        for (const { route, pathMatch } of best) {
             graph.edges.set(`${clientId}->${route.id}:RESOLVES_TO`, {
                 from: clientId,
                 to: route.id,
                 type: "RESOLVES_TO",
-                confidence: pathMatch.confidence,
-                reason: `HTTP client request resolves to backend route: ${pathMatch.reason}`,
+                confidence: best.length > 1 ? Math.min(pathMatch.confidence, 0.5) : pathMatch.confidence,
+                reason: `HTTP client request resolves to backend route: ${pathMatch.reason}${ambiguity}`,
             });
             linked += 1;
         }

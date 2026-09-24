@@ -11,13 +11,17 @@ import {
 } from "../../routes/routeExpander";
 import { resolveControllerClass } from "../../routes/parseUseStatements";
 import { recordRoutes } from "../../routes/recordRoute";
+import { classifyFileRole } from "../../../../shared/classification/fileRole";
 
 export function scopedCallExpressionType(
     rootNodeChild: Parser.SyntaxNode,
-    context: WalkContext
+    context: WalkContext,
+    file?: string
 ): void {
     if (isRouteCall(rootNodeChild)) {
-        handleRouteCall(rootNodeChild, context);
+        if (classifyFileRole(file) !== "test") {
+            handleRouteCall(rootNodeChild, context, file);
+        }
         return;
     }
 
@@ -71,11 +75,17 @@ function handleStaticCall(
         return;
     }
 
-    graph.edges.set(`${currentMethod}->${targetMethod}`, {
+    const edgeId = `${currentMethod}->${targetMethod}`;
+    const previous = graph.edges.get(edgeId);
+    const receiver = targetMethod.startsWith(`${resolvedClass}::`) ? undefined : resolvedClass;
+    const receiverIsUnambiguous = receiver && (!previous || previous.via === receiver);
+
+    graph.edges.set(edgeId, {
         from: currentMethod,
         to: targetMethod,
         type: "CALLS",
         callType: "STATIC",
+        ...(receiverIsUnambiguous ? { via: receiver } : {}),
     });
 
     resolveStaticCallArgumentFlows(node, context, targetMethod);
@@ -212,13 +222,15 @@ function isResourceVerb(verb: string): boolean {
     return verb === "resource" || verb === "apiresource";
 }
 
-function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
+const ROUTE_REGISTRATION_VERBS = new Set(["get", "post", "put", "patch", "delete", "options", "any", "resource", "apiresource"]);
+
+function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext, file?: string): void {
     const names = node.children
         .filter(child => child.type === "name")
         .map(child => child.text);
 
     const verb = names[1]?.toLowerCase();
-    if (!verb) {
+    if (!verb || !ROUTE_REGISTRATION_VERBS.has(verb)) {
         return;
     }
 
@@ -244,7 +256,8 @@ function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
                 controllerRef.controller,
                 "",
                 modifiers
-            )
+            ),
+            file
         );
         return;
     }
@@ -265,7 +278,7 @@ function handleRouteCall(node: Parser.SyntaxNode, context: WalkContext): void {
             "",
             modifiers.middleware
         ),
-    ]);
+    ], file);
 }
 
 function readControllerReferenceFromNode(

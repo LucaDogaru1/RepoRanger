@@ -14,6 +14,9 @@ import { errorDetail, recordScanFailure } from "../../../shared/reporting/scanFa
 import { createScanProgress } from "../../../shared/reporting/scanProgress";
 import { parseTreeSitterSource } from "../../../shared/parsing/parseTreeSitterSource";
 import { pruneUnresolvedJsCalls } from "../resolvers/pruneUnresolvedCalls";
+import { resolveNuxtAutoImportCalls } from "../nuxt/resolveNuxtAutoImports";
+import { linkNuxtAutoImportedComponents, resetNuxtComponentUsages } from "../nuxt/nuxtComponents";
+import { NUXT_CONFIG_FILE, readNuxtLayerConfig } from "../nuxt/nuxtConfig";
 
 function isVueFile(relativePath: string): boolean {
     return relativePath.endsWith(".vue");
@@ -70,6 +73,7 @@ export function processJsFiles(
     if (options?.resetHttpResourceRegistry !== false) {
         resetHttpResourceRegistry();
     }
+    resetNuxtComponentUsages();
     populateHttpResourceRegistry(files);
 
     const tsParser = createTsParser();
@@ -171,10 +175,26 @@ export function processJsFiles(
         console.log(`Parsed ${tsFallbackFiles} TypeScript files via strip fallback`);
     }
 
+    const relativePaths = files.map(file => file.relativePath);
+    const nuxtConfigs = files
+        .filter(file => NUXT_CONFIG_FILE.test(file.relativePath))
+        .map(file => readNuxtLayerConfig(file.absolutePath, file.relativePath, relativePaths));
+    const componentStats = linkNuxtAutoImportedComponents(nuxtConfigs, relativePaths);
+    if (componentStats.resolved > 0 || componentStats.ambiguous > 0) {
+        console.log(
+            `Nuxt auto-imported components: ${componentStats.resolved} linked, ${componentStats.ambiguous} ambiguous left unlinked`
+            + (componentStats.skippedContexts.length > 0 ? `; ${componentStats.skippedContexts.length} app contexts skipped (non-literal nuxt.config)` : "")
+        );
+        for (const example of componentStats.ambiguousExamples) {
+            console.log(`     ambiguous: ${example}`);
+        }
+    }
+
     if (options?.linkCrossLanguageEndpoints !== false) {
         const linkProgress = createScanProgress({ label: "JS link" });
         linkProgress.start();
         const linkStats = linkCrossLanguageEndpoints();
+        const autoImported = resolveNuxtAutoImportCalls(relativePaths);
         const prunedCalls = pruneUnresolvedJsCalls();
         linkProgress.done();
 
@@ -183,6 +203,9 @@ export function processJsFiles(
                 `Cross-language endpoints: ${linkStats.canonicalized} canonicalized, ` +
                 `${linkStats.merged} merged, ${linkStats.backendLinked} linked to PHP backend`
             );
+        }
+        if (autoImported > 0) {
+            console.log(`Resolved ${autoImported} Nuxt auto-imported composable calls`);
         }
         if (prunedCalls > 0) {
             console.log(`Pruned ${prunedCalls} unresolved JS call edges`);

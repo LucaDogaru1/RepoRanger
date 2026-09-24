@@ -326,7 +326,7 @@ function parseRouteCall(
     ];
 }
 
-export function extractRoutesFromSource(source: string): RouteDefinition[] {
+export function extractRoutesFromSource(source: string, mountPrefix = ""): RouteDefinition[] {
     const imports = parseUseStatements(source);
     const routes: RouteDefinition[] = [];
     const groups = collectRouteGroups(source, imports);
@@ -347,16 +347,21 @@ export function extractRoutesFromSource(source: string): RouteDefinition[] {
         const group = groupContextAtIndex(groups, match.index!);
         const modifiers = readRouteModifiers(source, closeIndex, imports);
         modifiers.middleware = unique([...group.middleware, ...(modifiers.middleware ?? [])]);
-        const parsed = parseRouteCall(verb, args, group.prefix, imports, modifiers);
+        const prefix = [mountPrefix, group.prefix].filter(Boolean).join("/");
+        const parsed = parseRouteCall(verb, args, prefix, imports, modifiers);
         routes.push(...parsed);
     }
 
     return routes;
 }
 
-export function extractRoutesFromRouteFile(absolutePath: string, relativePath: string): number {
+export function extractRoutesFromRouteFile(
+    absolutePath: string,
+    relativePath: string,
+    mountPrefix?: string,
+): number {
     const source = fs.readFileSync(absolutePath, "utf-8");
-    const routes = extractRoutesFromSource(source);
-    recordRoutes(routes, relativePath);
+    const routes = extractRoutesFromSource(source, mountPrefix ?? "");
+    recordRoutes(routes, relativePath, mountPrefix);
     return routes.length;
 }

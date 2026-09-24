@@ -50,6 +50,14 @@ export function processVueFile(
     const sfc = splitSfc(source);
 
     if (!sfc.script?.content) {
+        const templateOnly = resolveTemplateContent(sfc);
+        if (templateOnly) {
+            registerScriptSetupComponent("", createWalkContext(file.relativePath), {
+                externalTemplate: templateOnly,
+                fallbackName: componentFallbackName(file.relativePath),
+                scriptSetup: true,
+            });
+        }
         return { usedTsParser: false, usedStripFallback: false, parseError: false };
     }
 
@@ -82,6 +90,7 @@ export function processVueFile(
         registerScriptSetupComponent(parsed.scriptSource, context, {
             externalTemplate,
             fallbackName: componentFallbackName(file.relativePath),
+            scriptSetup: sfc.script.setup,
         });
     }
 

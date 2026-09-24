@@ -9,6 +9,7 @@ export interface VueSfc {
     script?: VueSfcBlock;
 }
 
+const LINE_CLOSED_BLOCK_PATTERN = /^<(template|script)(\s[^>]*)?>([\s\S]*?)^<\/\1>/gm;
 const BLOCK_PATTERN = /^<(template|script)(\s[^>]*)?>([\s\S]*?)<\/\1>/gm;
 
 function readLang(attributes: string | undefined, defaultLang: string): string {
@@ -21,9 +22,18 @@ function readLang(attributes: string | undefined, defaultLang: string): string {
 }
 
 export function splitSfc(source: string): VueSfc {
+    const lineClosed = splitWith(source, LINE_CLOSED_BLOCK_PATTERN);
+    const fallback = splitWith(source, BLOCK_PATTERN);
+    return {
+        ...(lineClosed.template ?? fallback.template ? { template: lineClosed.template ?? fallback.template } : {}),
+        ...(lineClosed.script ?? fallback.script ? { script: lineClosed.script ?? fallback.script } : {}),
+    };
+}
+
+function splitWith(source: string, pattern: RegExp): VueSfc {
     const result: VueSfc = {};
 
-    for (const match of source.matchAll(BLOCK_PATTERN)) {
+    for (const match of source.matchAll(pattern)) {
         const blockType = match[1]?.toLowerCase();
         const attributes = match[2] ?? "";
         const content = match[3]?.trim() ?? "";

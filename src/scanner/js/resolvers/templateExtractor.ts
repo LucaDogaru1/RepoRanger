@@ -6,6 +6,7 @@ export interface VuePropBinding {
 
 export interface VueTemplateMetadata {
     tags: string[];
+    componentTags: string[];
     props: string[];
     classes: string[];
     directives: string[];
@@ -28,8 +29,23 @@ const DYNAMIC_COMPONENT_PATTERN = /<component\b([\s\S]*?)(?:\/?)>/gi;
 const DYNAMIC_IS_PATTERN = /(?::is|v-bind:is)\s*=\s*(["'])([\s\S]*?)\1/i;
 const STATIC_IS_PATTERN = /(?:^|\s)is\s*=\s*(["'])([^"']+)\1/i;
 
+const COMPONENT_TAG_PATTERN = /<([A-Z][A-Za-z0-9]*|[a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?=[\s/>])/g;
+const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
+const RESERVED_DASHED_TAGS = new Set(["annotation-xml", "color-profile", "font-face", "font-face-src", "font-face-uri", "font-face-format", "font-face-name", "missing-glyph"]);
+
 function kebabToCamel(value: string): string {
     return value.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase());
+}
+
+function componentTagsOf(template: string): string[] {
+    const tags = new Set<string>();
+    for (const match of template.replace(HTML_COMMENT_PATTERN, "").matchAll(COMPONENT_TAG_PATTERN)) {
+        const raw = match[1]!;
+        if (RESERVED_DASHED_TAGS.has(raw)) continue;
+        const camel = raw.includes("-") ? kebabToCamel(raw).replace(/-(\d)/g, "$1") : raw;
+        tags.add(camel[0]!.toUpperCase() + camel.slice(1));
+    }
+    return [...tags];
 }
 
 export function extractVueTemplateMetadata(template: string): VueTemplateMetadata {
@@ -110,6 +126,7 @@ export function extractVueTemplateMetadata(template: string): VueTemplateMetadat
 
     return {
         tags: [...tags],
+        componentTags: componentTagsOf(template),
         props: [...props],
         classes: [...classes],
         directives: [...directives].filter(item => item.startsWith("v-")),

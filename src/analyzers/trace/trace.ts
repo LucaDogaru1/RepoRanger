@@ -4,18 +4,21 @@ import { analyzeChangeImpact, type ChangeImpactResult } from "../impact/ImpactSc
 import {
     findIncomingCalls,
     findNode,
+    findSfcModule,
     resolveMethodThroughInheritance,
     GraphNodeRow,
 } from "../../graph/queries/GraphQueries";
 import {
     findOutgoingCallChain,
+    findRenderedComponentFlows,
     type CallChainRow,
+    type RenderedComponentRow,
 } from "../../graph/queries/callChainQueries";
 import {
     findRouteControllerMethod,
     formatGraphEntryLabel,
+    findInterfaceMethodImplementations,
     isAbstractCallTarget,
-    resolveInterfaceMethodImplementation,
     shortNavigationLabel,
     type GraphEntryRow,
     type NavigationEdgeRow,
@@ -29,8 +32,12 @@ export interface TraceCallRow {
     id: string;
     depth: number;
     resolvedTo?: string;
+    dynamicImplementations?: number;
+    receiver?: string;
     file: string | null;
 }
+
+export type TraceRenderedComponent = Omit<RenderedComponentRow, "calls"> & { calls: TraceCallRow[] };
 
 export interface TraceCoverage {
     complete: string[];
@@ -49,6 +56,7 @@ export interface TraceResult {
     incomingCalls: TraceCallRow[];
     outgoingCalls: TraceCallRow[];
     outgoingCallsTruncated: boolean;
+    renderedComponents: TraceRenderedComponent[];
     flowLines: string[];
     coverage: TraceCoverage;
     reads: NavigationEdgeRow[];
@@ -67,7 +75,7 @@ export type TraceBuildResult =
 function resolveTarget(db: SQLiteDatabase, query: string): { target: GraphNodeRow; matchReason: string } | null {
     const exact = findNode(db, query);
     if (exact) {
-        return { target: exact, matchReason: "exact graph id" };
+        return { target: findSfcModule(db, exact) ?? exact, matchReason: "exact graph id" };
     }
 
     const matches = searchNodes(db, query, { limit: 5 });
@@ -81,7 +89,7 @@ function resolveTarget(db: SQLiteDatabase, query: string): { target: GraphNodeRo
         return null;
     }
 
-    return { target, matchReason: top.matchReason };
+    return { target: findSfcModule(db, target) ?? target, matchReason: top.matchReason };
 }
 
 function buildOutgoingCalls(
@@ -98,16 +106,18 @@ function buildOutgoingCalls(
     });
 
     return {
-        calls: chain.calls.map(call => mapCallChainRow(db, call, analysisNodeId)),
+        calls: chain.calls.map(call => mapCallChainRow(db, call)),
         truncated: chain.truncated,
     };
 }
 
-function mapCallChainRow(db: SQLiteDatabase, call: CallChainRow, callerId: string): TraceCallRow {
+function mapCallChainRow(db: SQLiteDatabase, call: CallChainRow): TraceCallRow {
+    const abstract = call.callType !== "STATIC" && isAbstractCallTarget(db, call.id);
+    const implementations = abstract ? findInterfaceMethodImplementations(db, call.id) : [];
     const resolvedTo = call.callType === "STATIC"
         ? undefined
-        : isAbstractCallTarget(db, call.id)
-        ? resolveInterfaceMethodImplementation(db, call.id, { preferNear: callerId })
+        : abstract
+        ? (implementations.length === 1 ? implementations[0] : undefined)
             ?? (call.file ? undefined : resolveMethodThroughInheritance(db, call.id) ?? undefined)
         : !call.file
             ? resolveMethodThroughInheritance(db, call.id) ?? undefined
@@ -118,7 +128,50 @@ function mapCallChainRow(db: SQLiteDatabase, call: CallChainRow, callerId: strin
         depth: call.depth,
         file: call.file,
         resolvedTo: resolvedTo && resolvedTo !== call.id ? resolvedTo : undefined,
+        ...(implementations.length > 1 ? { dynamicImplementations: implementations.length } : {}),
+        ...(call.callType === "STATIC" && call.via && !call.via.includes("::") ? { receiver: call.via } : {}),
     };
+}
+
+export function callLabel(call: TraceCallRow, label: (id: string) => string): string {
+    if (call.receiver) {
+        const methodName = call.id.slice(call.id.lastIndexOf("::") + 2);
+        return `${label(call.receiver)}::${methodName}`;
+    }
+    return `${label(call.resolvedTo ?? call.id)}${dynamicDispatchSuffix(call)}`;
+}
+
+export function dynamicDispatchSuffix(call: TraceCallRow): string {
+    return call.dynamicImplementations
+        ? ` [dynamic: ${call.dynamicImplementations} implementations]`
+        : "";
+}
+
+export function renderedComponentFlowLines(
+    components: TraceRenderedComponent[],
+    label: (id: string) => string,
+    options: { callPrefix?: string; callsPerComponent?: number } = {},
+): string[] {
+    const callPrefix = options.callPrefix ?? "";
+    const lines: string[] = [];
+    const printed = new Set<string>();
+    for (const component of components) {
+        component.path.forEach((hop, index) => {
+            if (printed.has(hop.id)) return;
+            printed.add(hop.id);
+            lines.push(`${"  ".repeat(index + 1)}→ ${label(hop.id)} [renders${hop.via ? ` <${hop.via}>` : ""}]`);
+        });
+        const indent = "  ".repeat(component.depth + 1);
+        for (const call of component.calls.slice(0, options.callsPerComponent ?? 2)) {
+            lines.push(`${indent}→ ${callPrefix}${callLabel(call, label)}`);
+        }
+        const request = component.http[0];
+        if (request) {
+            const handler = request.controllerMethod ? ` → ${label(request.controllerMethod)}` : "";
+            lines.push(`${indent}→ ${shortNavigationLabel(request.endpointId)} [HTTP]${handler}`);
+        }
+    }
+    return lines;
 }
 
 function buildFlowLines(input: {
@@ -126,6 +179,7 @@ function buildFlowLines(input: {
     resolvesTo: string | null;
     navigation: NavigationContext;
     outgoingCalls: TraceCallRow[];
+    renderedComponents: TraceRenderedComponent[];
 }): string[] {
     const lines: string[] = [];
     const methodLabel = shortNavigationLabel(input.resolvesTo ?? input.target.id);
@@ -156,10 +210,10 @@ function buildFlowLines(input: {
     }
 
     for (const call of input.outgoingCalls.slice(0, 10)) {
-        const label = call.resolvedTo ? shortNavigationLabel(call.resolvedTo) : shortNavigationLabel(call.id);
         const indent = "  ".repeat(call.depth);
-        lines.push(`${indent}→ calls ${label}`);
+        lines.push(`${indent}→ calls ${callLabel(call, shortNavigationLabel)}`);
     }
+    lines.push(...renderedComponentFlowLines(input.renderedComponents, shortNavigationLabel, { callPrefix: "calls " }));
 
     for (const request of input.navigation.httpDownstream.slice(0, 5)) {
         lines.push(`  → ${shortNavigationLabel(request.endpointId)} [HTTP_REQUEST]`);
@@ -183,6 +237,7 @@ function buildCoverage(input: {
     navigation: NavigationContext;
     outgoingCalls: TraceCallRow[];
     reads: NavigationEdgeRow[];
+    renderedComponents: TraceRenderedComponent[];
 }): TraceCoverage {
     const complete: string[] = [];
     const partial: string[] = [];
@@ -208,10 +263,18 @@ function buildCoverage(input: {
         missing.push("validation");
     }
 
-    if (input.outgoingCalls.length > 0 || input.navigation.httpDownstream.length > 0) {
+    if (
+        input.outgoingCalls.length > 0
+        || input.navigation.httpDownstream.length > 0
+        || input.renderedComponents.some(component => component.calls.length > 0)
+    ) {
         complete.push("calls");
     } else {
         missing.push("calls");
+    }
+
+    if (input.renderedComponents.length > 0) {
+        complete.push("rendered components");
     }
 
     if (input.navigation.httpDownstream.length > 0) {
@@ -283,9 +346,16 @@ export function buildTrace(
         : null;
     const analysisNodeId = controllerMethodId ?? target.id;
 
-    const { calls: outgoingCalls, truncated: outgoingCallsTruncated } = target.type === "method" || controllerMethodId
+    const isVueComponentModule = target.type === "js_module" && Boolean(target.file?.endsWith(".vue"));
+    const { calls: outgoingCalls, truncated: outgoingCallsTruncated } = target.type === "method" || controllerMethodId || isVueComponentModule
         ? buildOutgoingCalls(db, analysisNodeId, { depth, limit, includeInterfaceResolved })
         : { calls: [], truncated: false };
+
+    const renderedComponents: TraceRenderedComponent[] = isVueComponentModule
+        ? findRenderedComponentFlows(db, target.id, {
+            knownCallIds: outgoingCalls.flatMap(call => [call.id, call.resolvedTo ?? call.id]),
+        }).map(component => ({ ...component, calls: component.calls.map(call => mapCallChainRow(db, call)) }))
+        : [];
 
     const incomingRaw = findIncomingCalls(db, analysisNodeId, { limit, includeInterfaceResolved });
     const incomingCalls: TraceCallRow[] = incomingRaw.map(call => ({
@@ -297,7 +367,10 @@ export function buildTrace(
     const navigation = gatherNavigationContext(db, target, {
         limit,
         callersCount: incomingCalls.length,
-        callees: outgoingCalls.map(call => call.resolvedTo ?? call.id),
+        callees: [
+            ...outgoingCalls.map(call => call.resolvedTo ?? call.id),
+            ...renderedComponents.flatMap(component => component.calls.map(call => call.resolvedTo ?? call.id)),
+        ],
         includeInterfaceResolved,
     });
 
@@ -316,9 +389,10 @@ export function buildTrace(
         resolvesTo: controllerMethodId,
         navigation,
         outgoingCalls,
+        renderedComponents,
     });
 
-    const coverage = buildCoverage({ navigation, outgoingCalls, reads });
+    const coverage = buildCoverage({ navigation, outgoingCalls, reads, renderedComponents });
 
     return {
         ok: true,
@@ -333,6 +407,7 @@ export function buildTrace(
             incomingCalls,
             outgoingCalls,
             outgoingCallsTruncated,
+            renderedComponents,
             flowLines,
             coverage,
             reads,

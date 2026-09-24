@@ -6,6 +6,14 @@ import {
     VuePropBinding,
 } from "../resolvers/templateExtractor";
 import { JsWalkContext } from "../walk/context";
+import { recordUnresolvedComponentTag } from "../nuxt/nuxtComponents";
+
+const BUILTIN_COMPONENTS = new Set([
+    "Component", "Slot", "Template", "Transition", "TransitionGroup", "KeepAlive", "Teleport", "Suspense",
+    "RouterView", "RouterLink", "ClientOnly", "DevOnly", "ServerPlaceholder", "NuxtClientFallback",
+    "NuxtPage", "NuxtLayout", "NuxtLink", "NuxtLoadingIndicator", "NuxtErrorBoundary", "NuxtWelcome",
+    "NuxtIsland", "NuxtImg", "NuxtPicture", "NuxtRouteAnnouncer", "NuxtTime",
+]);
 
 function resolveChildComponentId(
     tagName: string,
@@ -41,9 +49,12 @@ function recordRenderedComponents(
     metadata: ReturnType<typeof extractVueTemplateMetadata>,
     context: JsWalkContext,
 ): void {
-    for (const tag of metadata.tags) {
+    for (const tag of metadata.componentTags) {
         const importTarget = context.imports.get(tag);
         if (!importTarget) {
+            if (!BUILTIN_COMPONENTS.has(tag) && !context.moduleConstants.has(tag)) {
+                recordUnresolvedComponentTag(componentId, context.file, tag);
+            }
             continue;
         }
         graph.edges.set(`${componentId}->${importTarget}:RENDERS_COMPONENT:${tag}`, {

@@ -41,3 +41,25 @@ export function functionDeclarationType(
 
     return functionId;
 }
+
+const FUNCTION_VALUE_TYPES = new Set(["arrow_function", "function_expression", "function"]);
+
+export function functionVariableDeclarationType(
+    node: Parser.SyntaxNode,
+    context: JsWalkContext,
+): string {
+    const parent = node.parent;
+    const exported = parent?.type === "export_statement";
+    const topLevel = parent?.type === "program" || (exported && parent?.parent?.type === "program");
+    if (!topLevel) return "";
+
+    const declarators = node.namedChildren.filter(child => child.type === "variable_declarator");
+    if (declarators.length !== 1) return "";
+
+    const declarator = declarators[0]!;
+    const value = declarator.childForFieldName("value");
+    if (!value || !FUNCTION_VALUE_TYPES.has(value.type)) return "";
+    if (declarator.childForFieldName("name")?.type !== "identifier") return "";
+
+    return functionDeclarationType(declarator, context, { exported });
+}

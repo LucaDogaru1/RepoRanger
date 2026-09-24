@@ -1,8 +1,8 @@
 import Database from "better-sqlite3";
-import { findNode, type GraphNodeRow } from "../../graph/queries/GraphQueries";
+import { findNode, findSfcModule, type GraphNodeRow } from "../../graph/queries/GraphQueries";
 import { isDataLayerNodeId } from "../../graph/queries/callChainQueries";
 import { readGraphFreshness, type GraphFreshness } from "../../graph/queries/graphFreshness";
-import { shortNavigationLabel } from "../../graph/queries/navigationQueries";
+import { findRouteHandlers, isRouteActionDefined, shortNavigationLabel } from "../../graph/queries/navigationQueries";
 import { findRelatedTests, type RelatedTestRow } from "../../graph/queries/relatedTests";
 import {
     searchNodes,
@@ -10,7 +10,7 @@ import {
     type SearchMatch,
 } from "../../graph/queries/searchNodes";
 import { classifyFileRole, fileRolePenalty } from "../../shared/classification/fileRole";
-import { buildTrace, type TraceResult } from "../trace/trace";
+import { buildTrace, callLabel, renderedComponentFlowLines, type TraceResult } from "../trace/trace";
 import { scoreConfidence, type LocateConfidence } from "./confidence";
 import { findDataLayerContinuation } from "./dataLayerContinuation";
 import {
@@ -104,8 +104,13 @@ function resolveMatch(
     }
 
     const matches = searchNodes(db, query, { kind, limit: 3 });
-    const match = matches[0];
-    return match ? { match, alternatives: matches.slice(1) } : null;
+    const top = matches[0];
+    if (!top) return null;
+    const sfcModule = findSfcModule(db, top);
+    const match = sfcModule ? { ...top, id: sfcModule.id, type: sfcModule.type, name: sfcModule.name } : top;
+    const sameSfc = (item: SearchMatch) => Boolean(match.file?.endsWith(".vue")) && item.file === match.file
+        && (item.type === "js_module" || item.type === "vue_component");
+    return { match, alternatives: matches.slice(1).filter(item => item.id !== match.id && !sameSfc(item)) };
 }
 
 function findOutboundHttpBridges(
@@ -238,12 +243,26 @@ function rankFiles(
 
     for (const call of trace.outgoingCalls) {
         const nodeId = call.resolvedTo ?? call.id;
+        if (call.receiver) {
+            add(call.receiver, `receiver of ${callLabel(call, compactLabel)}`, 870 - Math.min(call.depth, 4) * 10);
+        }
         add(nodeId, `call depth ${call.depth}`, 800 - Math.min(call.depth, 4) * 10);
         const node = findNode(db, nodeId);
         if (node) {
             for (const dependencyId of findFactoryDependencies(db, node)) {
                 add(dependencyId, `factory dependency of ${compactLabel(node.id)}`, 860);
             }
+        }
+    }
+    for (const component of trace.renderedComponents) {
+        const base = 780 - component.depth * 20;
+        const hop = component.path[component.path.length - 1];
+        const httpBonus = component.http.length > 0 ? 50 : 0;
+        add(component.id, `renders ${hop?.via ? `<${hop.via}>` : compactLabel(component.id)}`, base - 20 + httpBonus);
+        for (const call of component.calls) {
+            const nodeId = call.resolvedTo ?? call.id;
+            const issuesHttp = component.http.some(request => request.componentId === nodeId);
+            add(nodeId, `call depth ${call.depth} via ${compactLabel(component.id)}`, base - call.depth * 10 + (issuesHttp ? 150 : 0));
         }
     }
     for (const upstream of trace.navigation.httpUpstream) {
@@ -300,8 +319,9 @@ function buildFlow(
         lines.push(`  → ${compactLabel(trace.resolvesTo)} [handler]`);
     }
     for (const call of trace.outgoingCalls.slice(0, 10)) {
-        lines.push(`${"  ".repeat(Math.max(1, call.depth + 1))}→ ${compactLabel(call.resolvedTo ?? call.id)}`);
+        lines.push(`${"  ".repeat(Math.max(1, call.depth + 1))}→ ${callLabel(call, compactLabel)}`);
     }
+    lines.push(...renderedComponentFlowLines(trace.renderedComponents.slice(0, 2), compactLabel, { callsPerComponent: 1 }));
     for (const edge of trace.navigation.fieldAssignments.slice(0, 3)) {
         lines.push(`  → ${compactLabel(edge.to)} [${edge.type}]`);
     }
@@ -353,6 +373,18 @@ export function buildLocate(
     if (ambiguous) {
         warnings.push(`Ambiguous match; next candidate is ${compactLabel(ambiguous.id)} (score ${ambiguous.score}).`);
     }
+    const routeHandlers = entryNode ? findRouteHandlers(db, entryNode.id) : [];
+    const shownHandler = trace.resolvesTo ?? routeHandlers[0];
+    const missingRouteAction = shownHandler && !isRouteActionDefined(db, shownHandler)
+        ? shownHandler
+        : undefined;
+    if (routeHandlers.length > 1) {
+        const handlerLabel = (id: string): string => {
+            const root = id.split("\\")[0];
+            return root && root !== id && id.includes("\\") ? `${root}\\…\\${compactLabel(id)}` : compactLabel(id);
+        };
+        warnings.push(`Route is defined ${routeHandlers.length} times (${routeHandlers.map(handlerLabel).join(", ")}); showing ${handlerLabel(trace.resolvesTo ?? routeHandlers[0]!)}. Check which app/route file serves this request.`);
+    }
     if (httpBridges.length > 1) {
         warnings.push(`Multiple outbound HTTP endpoints found; showing ${compactLabel(httpBridge!.endpointId)}. Query a method to narrow the flow.`);
     }
@@ -384,6 +416,8 @@ export function buildLocate(
         hasEntry: Boolean(entryNode) || trace.coverage.complete.includes("entry"),
         missingCoverage: trace.coverage.missing,
         ambiguous: Boolean(ambiguous),
+        routeHandlerCount: routeHandlers.length,
+        missingRouteAction: missingRouteAction ? compactLabel(missingRouteAction) : undefined,
         freshness: graph,
     });
 

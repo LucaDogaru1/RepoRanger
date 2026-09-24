@@ -61,9 +61,12 @@ function graphContainsTestFiles(db: SQLiteDatabase): boolean {
     return Boolean(row);
 }
 
-function currentCommit(): string | null {
+function currentCommit(scanRoots: string | undefined): string | null {
+    const recordedRoot = scanRoots?.split(",")[0]?.trim();
+    const cwd = recordedRoot && fs.existsSync(recordedRoot) ? recordedRoot : undefined;
     try {
         return execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd,
             encoding: "utf8",
             stdio: ["ignore", "pipe", "ignore"],
         }).trim() || null;
@@ -92,7 +95,7 @@ export function readGraphFreshness(db: SQLiteDatabase, dbPath?: string): GraphFr
         : null;
 
     const commit = meta.get("git_commit") ?? null;
-    const head = currentCommit();
+    const head = currentCommit(meta.get("scan_roots"));
     const commitDrift: GraphFreshness["commitDrift"] = commit && head
         ? (commit === head ? "same" : "different")
         : "unknown";

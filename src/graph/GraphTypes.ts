@@ -37,6 +37,7 @@ export interface GraphNode {
     runtimeReasons?: string[];
     sources?: string[];
     scopeDirectory?: string;
+    routeMount?: string;
 }
 
 export interface Graph {

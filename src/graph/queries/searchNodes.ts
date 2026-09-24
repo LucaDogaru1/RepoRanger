@@ -365,18 +365,18 @@ function scoreMatchAgainstVariants(
     return best;
 }
 
-function routeVerbFromId(id: string): string | null {
-    const prefixLength = id.startsWith("http:") ? 5 : 4;
+export function routeVerbFromId(id: string): string | null {
     if (!id.startsWith("api:") && !id.startsWith("http:")) {
         return null;
     }
 
+    const prefixLength = id.startsWith("http:") ? 5 : 4;
     const colon = id.indexOf(":", prefixLength);
-    if (colon <= 0) {
+    if (colon <= prefixLength) {
         return null;
     }
 
-    return id.slice(4, colon).toUpperCase();
+    return id.slice(prefixLength, colon).toUpperCase();
 }
 
 function matchesNormalizedPath(id: string, file: string | null, normalizedPaths: string[]): boolean {
@@ -452,13 +452,15 @@ function scoreRouteMatch(
     const matchesPublicPath = matchesNormalizedPath(id, row.file, plan.requestedPaths);
     const matchesFrameworkPath = matchesNormalizedPath(id, row.file, plan.normalizedPaths);
 
-    if (plan.verb && id.toUpperCase().startsWith(`API:${plan.verb}:`) && matchesPublicPath) {
+    const verbMatches = Boolean(plan.verb) && routeVerbFromId(id) === plan.verb;
+
+    if (verbMatches && matchesPublicPath) {
         score = 1450;
         matchReason = "matching HTTP verb and structural public path";
     } else if (matchesPublicPath) {
         score = 1250;
         matchReason = "structural public path match";
-    } else if (plan.verb && id.toUpperCase().startsWith(`API:${plan.verb}:`) && matchesFrameworkPath) {
+    } else if (verbMatches && matchesFrameworkPath) {
         score = 1400;
         matchReason = "matching HTTP verb and structural framework path";
     } else if (matchesFrameworkPath) {

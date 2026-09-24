@@ -6,9 +6,11 @@ import {
 } from "./GraphQueries";
 import {
     filterFrameworkNoise,
+    findHttpDownstream,
     isAbstractCallTarget,
     preferConcreteCallTargets,
     resolveInterfaceMethodImplementation,
+    type HttpDownstreamRow,
 } from "./navigationQueries";
 
 type SQLiteDatabase = InstanceType<typeof Database>;
@@ -29,13 +31,13 @@ export interface CallChainQueryOptions {
     perHopLimit?: number;
 }
 
-function resolveCallTraversalTarget(db: SQLiteDatabase, call: CallRow, callerId: string): string {
+function resolveCallTraversalTarget(db: SQLiteDatabase, call: CallRow): string {
     if (call.callType === "STATIC") {
         return call.id;
     }
 
     if (isAbstractCallTarget(db, call.id)) {
-        const implementation = resolveInterfaceMethodImplementation(db, call.id, { preferNear: callerId });
+        const implementation = resolveInterfaceMethodImplementation(db, call.id);
         if (implementation) {
             return implementation;
         }
@@ -156,7 +158,7 @@ export function findOutgoingCallChain(
             ));
 
             for (const call of calls) {
-                const traversalTarget = resolveCallTraversalTarget(db, call, current.traversalId);
+                const traversalTarget = resolveCallTraversalTarget(db, call);
                 if (current.path.has(traversalTarget) || seenTargets.has(call.id)) {
                     continue;
                 }
@@ -202,4 +204,126 @@ export function findOutgoingCallChain(
     }
 
     return { calls: results, truncated };
+}
+
+export interface RenderedComponentRow {
+    id: string;
+    depth: number;
+    path: Array<{ id: string; via: string | null }>;
+    calls: CallChainRow[];
+    http: HttpDownstreamRow[];
+}
+
+export interface RenderedComponentOptions {
+    maxDepth?: number;
+    maxComponents?: number;
+    callDepth?: number;
+    callLimit?: number;
+    knownCallIds?: Iterable<string>;
+}
+
+const GENERIC_RENDER_FAN_IN = 8;
+const MAX_CHILDREN_PER_LEVEL = 12;
+
+function escapeLike(value: string): string {
+    return value.replace(/[%_\\]/g, "\\$&");
+}
+
+function findRenderedChildren(db: SQLiteDatabase, moduleId: string): Array<{ id: string; via: string | null }> {
+    return db.prepare(`
+        SELECT e.to_id AS id, MIN(e.via) AS via
+        FROM edges e
+        JOIN nodes t ON t.id = e.to_id
+        WHERE e.type = 'RENDERS_COMPONENT'
+          AND (e.from_id = ? OR e.from_id LIKE ? ESCAPE '\\')
+          AND t.file LIKE '%.vue'
+        GROUP BY e.to_id
+        ORDER BY e.to_id ASC
+    `).all(moduleId, `${escapeLike(moduleId)}::%`) as Array<{ id: string; via: string | null }>;
+}
+
+function renderFanIn(db: SQLiteDatabase, moduleId: string): number {
+    const row = db.prepare(`
+        SELECT COUNT(DISTINCT n.file) AS parents
+        FROM edges e
+        JOIN nodes n ON n.id = e.from_id
+        WHERE e.type = 'RENDERS_COMPONENT' AND e.to_id = ?
+    `).get(moduleId) as { parents: number } | undefined;
+    return row?.parents ?? 0;
+}
+
+function isComposableOrStore(nodeId: string): boolean {
+    const name = nodeId.slice(nodeId.lastIndexOf("::") + 2);
+    return /^use[A-Z]/.test(name) || /\/(?:composables|stores)\//.test(nodeId);
+}
+
+export function findRenderedComponentFlows(
+    db: SQLiteDatabase,
+    startId: string,
+    options?: RenderedComponentOptions,
+): RenderedComponentRow[] {
+    const maxDepth = options?.maxDepth ?? 2;
+    const maxComponents = options?.maxComponents ?? 3;
+    const callDepth = options?.callDepth ?? 2;
+    const callLimit = options?.callLimit ?? 6;
+    const known = new Set(options?.knownCallIds ?? []);
+
+    const visited = new Set([startId]);
+    const candidates: Array<RenderedComponentRow & { score: number }> = [];
+    let frontier: Array<{ id: string; path: RenderedComponentRow["path"] }> = [{ id: startId, path: [] }];
+
+    for (let depth = 1; depth <= maxDepth && frontier.length > 0; depth += 1) {
+        const level: Array<{ id: string; path: RenderedComponentRow["path"]; fanIn: number }> = [];
+        for (const parent of frontier) {
+            for (const child of findRenderedChildren(db, parent.id)) {
+                if (visited.has(child.id)) continue;
+                visited.add(child.id);
+                level.push({ id: child.id, path: [...parent.path, child], fanIn: renderFanIn(db, child.id) });
+            }
+        }
+        level.sort((a, b) => a.fanIn - b.fanIn || a.id.localeCompare(b.id));
+
+        const nextFrontier: typeof frontier = [];
+        for (const child of level.slice(0, MAX_CHILDREN_PER_LEVEL)) {
+            const generic = child.fanIn >= GENERIC_RENDER_FAN_IN;
+            if (!generic) nextFrontier.push({ id: child.id, path: child.path });
+
+            const calls = findOutgoingCallChain(db, child.id, { depth: callDepth, limit: callLimit }).calls
+                .filter(call => !known.has(call.id));
+            const http = uniqueEndpoints([child.id, ...calls.map(call => call.id)]
+                .flatMap(id => findHttpDownstream(db, id, 2)));
+            const stateful = calls.filter(call => isComposableOrStore(call.id)).length;
+            if (http.length === 0 && (generic || stateful === 0)) continue;
+
+            candidates.push({
+                id: child.id,
+                depth,
+                path: child.path,
+                calls,
+                http,
+                score: http.length * 100 + stateful * 20 + calls.length * 5 - depth * 40,
+            });
+        }
+        frontier = nextFrontier;
+    }
+
+    const shown = new Set(known);
+    return candidates
+        .sort((a, b) => b.score - a.score || a.depth - b.depth || a.id.localeCompare(b.id))
+        .slice(0, maxComponents)
+        .map(({ score: _score, ...component }) => {
+            const calls = component.calls.filter(call => !shown.has(call.id));
+            calls.forEach(call => shown.add(call.id));
+            return { ...component, calls };
+        });
+}
+
+function uniqueEndpoints(rows: HttpDownstreamRow[]): HttpDownstreamRow[] {
+    const byEndpoint = new Map<string, HttpDownstreamRow>();
+    for (const row of rows) {
+        if (!byEndpoint.has(row.endpointId) || (!byEndpoint.get(row.endpointId)!.controllerMethod && row.controllerMethod)) {
+            byEndpoint.set(row.endpointId, row);
+        }
+    }
+    return [...byEndpoint.values()];
 }

@@ -16,6 +16,8 @@ export interface ConfidenceInput {
     hasEntry: boolean;
     missingCoverage: string[];
     ambiguous: boolean;
+    routeHandlerCount?: number;
+    missingRouteAction?: string;
     freshness: GraphFreshness;
 }
 
@@ -44,6 +46,16 @@ export function scoreConfidence(input: ConfidenceInput): LocateConfidence {
     if (input.ambiguous) {
         penalty += 1;
         reasons.push("several candidates scored alike");
+    }
+
+    if ((input.routeHandlerCount ?? 0) > 1) {
+        penalty += 1;
+        reasons.push(`URL is handled by ${input.routeHandlerCount} controllers in different route files`);
+    }
+
+    if (input.missingRouteAction) {
+        penalty += 1;
+        reasons.push(`route action ${input.missingRouteAction} is not defined in the controller or its scanned parents`);
     }
 
     if (!input.hasEntry) {

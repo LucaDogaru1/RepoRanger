@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { GraphNodeRow } from "./GraphQueries";
+import { classifyFileRole } from "../../shared/classification/fileRole";
 
 type SQLiteDatabase = InstanceType<typeof Database>;
 
@@ -163,10 +164,55 @@ export function findRouteControllerMethod(
                 AND resolution.to_id = route.from_id
             )
           )
+        ORDER BY route.to_id ASC
         LIMIT 1
     `).get(endpointId, endpointId) as { to_id?: string } | undefined;
 
     return row?.to_id ?? null;
+}
+
+export function findRouteHandlers(
+    db: SQLiteDatabase,
+    endpointId: string,
+): string[] {
+    const rows = db.prepare(`
+        SELECT DISTINCT route.to_id
+        FROM edges route
+        WHERE route.type = 'ROUTES_TO'
+          AND (
+            route.from_id = ?
+            OR EXISTS (
+              SELECT 1
+              FROM edges resolution
+              WHERE resolution.type = 'RESOLVES_TO'
+                AND resolution.from_id = ?
+                AND resolution.to_id = route.from_id
+            )
+          )
+        ORDER BY route.to_id ASC
+        LIMIT 6
+    `).all(endpointId, endpointId) as Array<{ to_id: string }>;
+
+    return rows.map(row => row.to_id);
+}
+
+export function isRouteActionDefined(db: SQLiteDatabase, methodId: string): boolean {
+    const separator = methodId.lastIndexOf("::");
+    if (separator < 0) return true;
+    const className = methodId.slice(0, separator);
+    const method = methodId.slice(separator + 2);
+    const row = db.prepare(`
+        WITH RECURSIVE lineage(id) AS (
+            SELECT ?
+            UNION
+            SELECT parent.to_id
+            FROM edges parent
+            JOIN lineage ON parent.from_id = lineage.id
+            WHERE parent.type IN ('EXTENDS', 'USES_TRAIT')
+        )
+        SELECT 1 FROM lineage JOIN nodes ON nodes.id = lineage.id || '::' || ? LIMIT 1
+    `).get(className, method);
+    return Boolean(row);
 }
 
 export function findResolvedRouteEndpoint(
@@ -584,58 +630,39 @@ export function isAbstractCallTarget(db: SQLiteDatabase, methodId: string): bool
     return ABSTRACT_NAME_PATTERN.test(classId);
 }
 
-function sharedNamespaceDepth(left: string, right: string): number {
-    const leftParts = left.split("\\");
-    const rightParts = right.split("\\");
-    let shared = 0;
-    while (shared < leftParts.length && shared < rightParts.length && leftParts[shared] === rightParts[shared]) {
-        shared += 1;
-    }
-    return shared;
-}
-
-export function resolveInterfaceMethodImplementation(
+export function findInterfaceMethodImplementations(
     db: SQLiteDatabase,
     interfaceMethodId: string,
-    options?: { preferNear?: string },
-): string | null {
+): string[] {
     const separator = interfaceMethodId.lastIndexOf("::");
     if (separator === -1) {
-        return null;
+        return [];
     }
 
     const interfaceClassId = interfaceMethodId.slice(0, separator);
     const methodName = interfaceMethodId.slice(separator + 2);
 
-    const candidates = db.prepare(`
-        SELECT from_id
-        FROM edges
-        WHERE type IN ('IMPLEMENTS', 'EXTENDS')
-          AND to_id = ?
-        ORDER BY from_id ASC
-    `).all(interfaceClassId) as Array<{ from_id: string }>;
+    const rows = db.prepare(`
+        SELECT DISTINCT m.id, m.file
+        FROM edges e
+        JOIN nodes m ON m.id = e.from_id || '::' || ?
+        WHERE e.type IN ('IMPLEMENTS', 'EXTENDS')
+          AND e.to_id = ?
+          AND m.type = 'method'
+        ORDER BY m.id ASC
+    `).all(methodName, interfaceClassId) as Array<{ id: string; file: string | null }>;
 
-    const methodExists = db.prepare(`
-        SELECT id FROM nodes WHERE id = ? AND type = 'method' LIMIT 1
-    `);
+    return rows
+        .filter(row => classifyFileRole(row.file) === "source")
+        .map(row => row.id);
+}
 
-    const resolved = candidates
-        .map(({ from_id: classId }) => `${classId}::${methodName}`)
-        .filter(candidate => Boolean(methodExists.get(candidate)));
-
-    if (resolved.length === 0) {
-        return null;
-    }
-
-    if (!options?.preferNear || resolved.length === 1) {
-        return resolved[0]!;
-    }
-
-    const near = options.preferNear;
-    return resolved
-        .map(candidate => ({ candidate, shared: sharedNamespaceDepth(candidate, near) }))
-        .sort((left, right) => right.shared - left.shared || left.candidate.localeCompare(right.candidate))
-        [0]!.candidate;
+export function resolveInterfaceMethodImplementation(
+    db: SQLiteDatabase,
+    interfaceMethodId: string,
+): string | null {
+    const implementations = findInterfaceMethodImplementations(db, interfaceMethodId);
+    return implementations.length === 1 ? implementations[0]! : null;
 }
 
 export function preferConcreteCallTargets<T extends { id: string }>(

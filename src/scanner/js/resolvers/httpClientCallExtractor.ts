@@ -14,6 +14,7 @@ const HTTP_GET_METHODS = new Set(["fetch", "get", "index", "show", "list"]);
 const HTTP_POST_METHODS = new Set(["post", "create", "store", "save"]);
 const HTTP_PUT_METHODS = new Set(["put", "update", "patch", "sync"]);
 const HTTP_DELETE_METHODS = new Set(["delete", "destroy", "remove"]);
+const RESOURCE_COLLECTION_METHODS = new Set(["create", "store"]);
 
 function inferHttpMethod(methodName: string, callNode: Parser.SyntaxNode): string {
     const lower = methodName.toLowerCase();
@@ -54,9 +55,14 @@ function normalizeUrlTemplate(url: string): string {
 function resolveCallUrl(
     urlTemplate: string,
     callNode: Parser.SyntaxNode,
-    context: JsWalkContext
+    context: JsWalkContext,
+    resourceMethod: string,
 ): string {
     let path = normalizeUrlTemplate(urlTemplate);
+
+    if (RESOURCE_COLLECTION_METHODS.has(resourceMethod.toLowerCase()) && /\/\{param\}$/.test(path)) {
+        return path.replace(/\/\{param\}$/, "") || "/";
+    }
 
     const hasIdPlaceholder = /\{param\}/.test(path);
     const args = callNode.childForFieldName("arguments");
@@ -184,7 +190,7 @@ export function extractHttpClientEndpoint(
         return null;
     }
 
-    const path = resolveCallUrl(definition.urlTemplate, callNode, context);
+    const path = resolveCallUrl(definition.urlTemplate, callNode, context, memberCall.method);
     return { method: httpMethod, path, via };
 }
 

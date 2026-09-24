@@ -107,6 +107,7 @@ function walkMethodBodies(
 export interface RegisterVueComponentOptions {
     externalTemplate?: string;
     fallbackName?: string;
+    scriptSetup?: boolean;
 }
 
 export function registerVueComponentFromOptionsObject(
@@ -241,7 +242,7 @@ export function registerScriptSetupComponent(
     context: JsWalkContext,
     options: RegisterVueComponentOptions = {}
 ): string | null {
-    if (!/\bdefineProps\s*\(/.test(script) && !/<script[^>]*setup/.test(context.file)) {
+    if (!options.scriptSetup && !/\bdefineProps\s*[<(]/.test(script)) {
         return null;
     }
 
